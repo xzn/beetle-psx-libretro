@@ -636,7 +636,8 @@ void rsx_intf_push_quad(
    bool dither,
    int blend_mode,
    uint32_t mask_test,
-   uint32_t set_mask)
+   uint32_t set_mask,
+   bool sprite)
 {
 #ifdef RSX_DUMP
    const rsx_dump_vertex vertices[4] = {
@@ -679,7 +680,7 @@ void rsx_intf_push_quad(
                texture_blend_mode,
                depth_shift,
                dither,
-               blend_mode, mask_test != 0, set_mask != 0);
+               blend_mode, mask_test != 0, set_mask != 0, sprite);
 #endif
          break;
    }

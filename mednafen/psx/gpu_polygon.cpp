@@ -1101,7 +1101,8 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
 						DitherEnabled(gpu),
 						BlendMode,
 						MaskEval_TA,
-						gpu->MaskSetOR);
+						gpu->MaskSetOR,
+						false);
 				}
 			}
 			else

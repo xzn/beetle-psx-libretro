@@ -88,6 +88,12 @@ public:
 		}
 	};
 
+	enum class PrimitiveType
+	{
+		Sprite,
+		Polygon
+	};
+
 	struct RenderState
 	{
 		//Rect display_mode;
@@ -136,6 +142,7 @@ public:
 		bool display_on = false;
 		//bool dither = false;
 		bool adaptive_smoothing = true;
+		PrimitiveType primitive_type = PrimitiveType::Polygon;
 
 		UVRect UVLimits;
 	};
@@ -319,6 +326,16 @@ public:
 		render_state.UVLimits.max_v = max_v;
 	}
 
+	inline void set_primitive_type(PrimitiveType type)
+	{
+		render_state.primitive_type = type;
+	}
+
+	inline void set_primitive_type(bool sprite)
+	{
+		set_primitive_type(sprite ? PrimitiveType::Sprite : PrimitiveType::Polygon);
+	}
+
 	// Draw commands
 	void clear_rect(const Rect &rect, FBColor color);
 	void draw_line(const Vertex *vertices);
@@ -438,6 +455,7 @@ private:
 
 		Vulkan::Program *opaque_flat;
 		Vulkan::Program *opaque_textured;
+		Vulkan::Program *opaque_sprite_textured;
 		Vulkan::Program *opaque_semi_transparent;
 		Vulkan::Program *semi_transparent;
 		Vulkan::Program *semi_transparent_masked_add;
@@ -533,6 +551,8 @@ private:
 		// Textured primitives, no semi-transparency.
 		std::vector<BufferVertex> opaque_textured;
 		std::vector<PrimitiveInfo> opaque_textured_scissor;
+		std::vector<BufferVertex> opaque_sprite_textured;
+		std::vector<PrimitiveInfo> opaque_sprite_textured_scissor;
 
 		// Textured primitives, semi-transparency enabled.
 		std::vector<BufferVertex> semi_transparent_opaque;
@@ -561,7 +581,7 @@ private:
 
 	void dispatch(const std::vector<BufferVertex> &vertices, std::vector<PrimitiveInfo> &scissors);
 	void render_opaque_primitives();
-	void render_opaque_texture_primitives();
+	void render_opaque_texture_primitives(bool sprite = false);
 	void render_semi_transparent_opaque_texture_primitives();
 	void render_semi_transparent_primitives();
 	void reset_queue();

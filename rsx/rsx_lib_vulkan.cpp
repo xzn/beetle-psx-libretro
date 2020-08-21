@@ -754,7 +754,7 @@ void rsx_vulkan_push_quad(
       uint8_t depth_shift,
       bool dither,
       int blend_mode,
-      bool mask_test, bool set_mask)
+      bool mask_test, bool set_mask, bool sprite)
 {
    if (!renderer)
       return;
@@ -766,6 +766,7 @@ void rsx_vulkan_push_quad(
    renderer->set_mask_test(mask_test);
    renderer->set_force_mask_bit(set_mask);
    renderer->set_UV_limits(min_u, min_v, max_u, max_v);
+   renderer->set_primitive_type(sprite);
    if (texture_blend_mode != 0)
    {
       switch (depth_shift)

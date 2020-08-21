@@ -129,7 +129,8 @@ void rsx_intf_push_quad(float p0x, float p0y, float p0w,
                         bool dither,
                         int blend_mode,
                         uint32_t mask_test,
-                        uint32_t set_mask);
+                        uint32_t set_mask,
+                        bool sprite);
 
 void rsx_intf_push_line(int16_t p0x, int16_t p0y,
                         int16_t p1x, int16_t p1y,

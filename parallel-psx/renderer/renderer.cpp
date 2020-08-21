@@ -308,6 +308,10 @@ void Renderer::init_primitive_pipelines()
 				semitrans_frag, sizeof(semitrans_frag));
 		break;
 	}
+
+	// Use the default pipeline for sprites which for correct result should not be filtered.
+	pipelines.opaque_sprite_textured = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
+			opaque_textured_frag, sizeof(opaque_textured_frag));
 }
 
 void Renderer::init_primitive_feedback_pipelines()
@@ -1490,9 +1494,18 @@ std::vector<Renderer::BufferVertex> *Renderer::select_pipeline(unsigned prims, i
 		}
 		else
 		{
-			for (unsigned i = 0; i < prims; i++)
-				queue.opaque_textured_scissor.emplace_back(queue.opaque_textured_scissor.size(), scissor, hd_texture);
-			return &queue.opaque_textured;
+			if (render_state.primitive_type == PrimitiveType::Sprite)
+			{
+				for (unsigned i = 0; i < prims; i++)
+					queue.opaque_sprite_textured_scissor.emplace_back(queue.opaque_sprite_textured_scissor.size(), scissor, hd_texture);
+				return &queue.opaque_sprite_textured;
+			}
+			else
+			{
+				for (unsigned i = 0; i < prims; i++)
+					queue.opaque_textured_scissor.emplace_back(queue.opaque_textured_scissor.size(), scissor, hd_texture);
+				return &queue.opaque_textured;
+			}
 		}
 	}
 	else if (render_state.semi_transparent != SemiTransparentMode::None)
@@ -1621,6 +1634,7 @@ void Renderer::draw_line(const Vertex *vertices)
 	// This should be plenty fast for the quite small amount of lines games render.
 	Vertex vert[4];
 	build_line_quad(vert, vertices);
+	set_primitive_type(false);
 	draw_quad(vert);
 }
 
@@ -1635,6 +1649,7 @@ void Renderer::draw_triangle(const Vertex *vertices)
 	BufferVertex vert[3];
 	HdTextureHandle hd_texture_index = HdTextureHandle::make_none();
 	build_attribs(vert, vertices, 3, hd_texture_index);
+	set_primitive_type(false);
 	const int scissor_index = queue.scissor_invariant ? -1 : int(queue.scissors.size() - 1);
 	auto *out = select_pipeline(1, scissor_index, hd_texture_index);
 	if (out)
@@ -1809,6 +1824,7 @@ void Renderer::flush_render_pass(const Rect &rect)
 	cmd->set_texture(0, 2, dither_lut->get_view(), StockSampler::NearestWrap);
 
 	render_opaque_primitives();
+	render_opaque_texture_primitives(true);
 	render_opaque_texture_primitives();
 	render_semi_transparent_opaque_texture_primitives();
 	render_semi_transparent_primitives();
@@ -2137,17 +2153,26 @@ void Renderer::render_semi_transparent_opaque_texture_primitives()
 	dispatch(vertices, scissors);
 }
 
-void Renderer::render_opaque_texture_primitives()
+void Renderer::render_opaque_texture_primitives(bool sprite)
 {
-	auto &vertices = queue.opaque_textured;
-	auto &scissors = queue.opaque_textured_scissor;
-	if (vertices.empty())
+	auto *vertices = &queue.opaque_textured;
+	auto *scissors = &queue.opaque_textured_scissor;
+	auto *program = pipelines.opaque_textured;
+
+	if (sprite)
+	{
+		vertices = &queue.opaque_sprite_textured;
+		scissors = &queue.opaque_sprite_textured_scissor;
+		program = pipelines.opaque_sprite_textured;
+	}
+
+	if (vertices->empty())
 		return;
 
 	cmd->set_opaque_state();
 	cmd->set_cull_mode(VK_CULL_MODE_NONE);
 	cmd->set_depth_compare(VK_COMPARE_OP_LESS);
-	cmd->set_program(*pipelines.opaque_textured);
+	cmd->set_program(*program);
 	cmd->set_primitive_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	cmd->set_vertex_attrib(0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0);
 	cmd->set_vertex_attrib(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(BufferVertex, color));
@@ -2157,7 +2182,7 @@ void Renderer::render_opaque_texture_primitives()
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
 	cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestClamp);
 
-	dispatch(vertices, scissors);
+	dispatch(*vertices, *scissors);
 }
 
 void Renderer::flush_blits()
@@ -2461,6 +2486,8 @@ void Renderer::reset_queue()
 	queue.opaque_scissor.clear();
 	queue.opaque_textured.clear();
 	queue.opaque_textured_scissor.clear();
+	queue.opaque_sprite_textured.clear();
+	queue.opaque_sprite_textured_scissor.clear();
 	queue.textures.clear();
 	queue.semi_transparent.clear();
 	queue.semi_transparent_state.clear();
