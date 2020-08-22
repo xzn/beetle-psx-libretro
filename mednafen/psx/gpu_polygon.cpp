@@ -965,7 +965,13 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
    // iCB: If any vertices lack w components then set all to 1
    if (invalidW)
       for (unsigned v = 0; v < 3; v++)
+      {
+         // HACK Set x and y to non pgxp as well since they are likely degenerate
+         // This fixes a few glitches when 2D elements are drawn as polygons (xzn)
+         vertices[v].precise[0] = (float)vertices[v].x;
+         vertices[v].precise[1] = (float)vertices[v].y;
          vertices[v].precise[2] = 1.f;
+      }
 
    // Calculated UV offsets (needed for hardware renderers and software with scaling)
    // Do one time updates for primitive
