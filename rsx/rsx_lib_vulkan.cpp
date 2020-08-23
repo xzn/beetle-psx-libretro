@@ -203,9 +203,10 @@ void rsx_vulkan_set_video_refresh(retro_video_refresh_t cb)
    video_refresh_cb = cb;
 }
 
-void rsx_vulkan_get_system_av_info(struct retro_system_av_info *info)
+void rsx_vulkan_get_system_av_info(struct retro_system_av_info *info, bool refresh_variables)
 {
-   rsx_vulkan_refresh_variables();
+   if (refresh_variables)
+      rsx_vulkan_refresh_variables();
 
    memset(info, 0, sizeof(*info));
 
@@ -444,8 +445,9 @@ void rsx_vulkan_refresh_variables(void)
    {
       // Potential bad behavior from calling rsx_vulkan_get_system_av_info() from inside
       // rsx_vulkan_refresh_variables() since both functions call each other...
+      // Guarding with a bool. Otherwise the second call to SET_SYSTEM_AV_INFO always returns false.
       retro_system_av_info info;
-      rsx_vulkan_get_system_av_info(&info);
+      rsx_vulkan_get_system_av_info(&info, false);
 
       if (!environ_cb(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info))
       {

@@ -7,7 +7,8 @@
 //void rsx_vulkan_set_blend_mode(enum blending_modes mode);
 void rsx_vulkan_set_environment(retro_environment_t cb);
 void rsx_vulkan_set_video_refresh(retro_video_refresh_t cb);
-void rsx_vulkan_get_system_av_info(struct retro_system_av_info *info);
+void rsx_vulkan_get_system_av_info(struct retro_system_av_info *info,
+                                   bool refresh_variables = true);
 
 bool rsx_vulkan_open(bool is_pal);
 void rsx_vulkan_close(void);
