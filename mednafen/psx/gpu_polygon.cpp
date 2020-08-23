@@ -928,21 +928,19 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
       vertices[v].y = (y + gpu->OffsY) << gpu->upscale_shift;
 
       if (pgxp) {
-   OGLVertex vert;
-   PGXP_GetVertex(cb - baseCB, cb, &vert, 0, 0);
+         OGLVertex vert;
+         PGXP_GetVertex(cb - baseCB, cb, &vert, 0, 0);
 
-   vertices[v].precise[0] = ((vert.x + (float)gpu->OffsX) * UPSCALE(gpu));
-   vertices[v].precise[1] = ((vert.y + (float)gpu->OffsY) * UPSCALE(gpu));
-   vertices[v].precise[2] = vert.w;
+         vertices[v].precise[0] = ((vert.x + (float)gpu->OffsX) * UPSCALE(gpu));
+         vertices[v].precise[1] = ((vert.y + (float)gpu->OffsY) * UPSCALE(gpu));
+         vertices[v].precise[2] = vert.w;
 
-   if (!vert.valid_w)
-     invalidW = true;
+         if (!vert.valid_w)
+            invalidW = true;
 
       } else {
-   vertices[v].precise[0] = (float)x + gpu->OffsX;
-   vertices[v].precise[1] = (float)y + gpu->OffsY;
-
-   invalidW = true;
+         // We set precise in the loop below in this case.
+         invalidW = true;
       }
 
       cb++;
