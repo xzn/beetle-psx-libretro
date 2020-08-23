@@ -86,6 +86,7 @@ void rsx_intf_set_display_mode(bool depth_24bpp,
                                bool is_pal,
                                bool is_480i,
                                int width_mode); //enum
+void rsx_intf_set_current_readout(uint16_t y_off, uint16_t y_cur);
 
 void rsx_intf_push_triangle(float p0x, float p0y, float p0w,
                             float p1x, float p1y, float p1w,

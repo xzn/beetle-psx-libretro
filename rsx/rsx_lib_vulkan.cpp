@@ -660,6 +660,14 @@ void rsx_vulkan_set_display_mode(bool depth_24bpp,
    }
 }
 
+void rsx_vulkan_set_current_readout(uint16_t y_off, uint16_t y_cur)
+{
+   if (!renderer)
+      return;
+
+   renderer->set_current_readout(y_off, y_cur);
+}
+
 void rsx_vulkan_push_triangle(
       float p0x, float p0y, float p0w,
       float p1x, float p1y, float p1w,
