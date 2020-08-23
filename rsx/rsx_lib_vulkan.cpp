@@ -768,7 +768,16 @@ void rsx_vulkan_push_quad(
    renderer->set_mask_test(mask_test);
    renderer->set_force_mask_bit(set_mask);
    renderer->set_UV_limits(min_u, min_v, max_u, max_v);
-   renderer->set_primitive_type(sprite);
+
+   Renderer::PrimitiveType primitive_type;
+   if (sprite)
+      primitive_type = Renderer::PrimitiveType::Sprite;
+   else if (p0w == 1.0 && p1w == 1.0 && p2w == 1.0 && p3w == 1.0)
+      primitive_type = Renderer::PrimitiveType::Polygon_w1;
+   else
+      primitive_type = Renderer::PrimitiveType::Polygon;
+   renderer->set_primitive_type(primitive_type);
+
    if (texture_blend_mode != 0)
    {
       switch (depth_shift)

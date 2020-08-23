@@ -90,8 +90,9 @@ public:
 
 	enum class PrimitiveType
 	{
+		Polygon,
+		Polygon_w1,
 		Sprite,
-		Polygon
 	};
 
 	struct RenderState
@@ -326,14 +327,9 @@ public:
 		render_state.UVLimits.max_v = max_v;
 	}
 
-	inline void set_primitive_type(PrimitiveType type)
+	inline void set_primitive_type(PrimitiveType type = PrimitiveType::Polygon)
 	{
 		render_state.primitive_type = type;
-	}
-
-	inline void set_primitive_type(bool sprite)
-	{
-		set_primitive_type(sprite ? PrimitiveType::Sprite : PrimitiveType::Polygon);
 	}
 
 	// Draw commands
@@ -455,7 +451,7 @@ private:
 
 		Vulkan::Program *opaque_flat;
 		Vulkan::Program *opaque_textured;
-		Vulkan::Program *opaque_sprite_textured;
+		Vulkan::Program *opaque_spr_textured;
 		Vulkan::Program *opaque_semi_transparent;
 		Vulkan::Program *semi_transparent;
 		Vulkan::Program *semi_transparent_masked_add;
@@ -509,6 +505,7 @@ private:
 		SemiTransparentMode semi_transparent;
 		bool textured;
 		bool masked;
+		bool w1; // w of vertice = 1
 
 		bool operator==(const SemiTransparentState &other) const
 		{
@@ -548,11 +545,18 @@ private:
 		std::vector<BufferVertex> opaque;
 		std::vector<PrimitiveInfo> opaque_scissor;
 
+		// Sprite primitives are stored separately when Texture Filtering
+		// is disabled for sprites so a separate draw call may be issued.
+		// Polygon primitives with w = 1 are used for detected 2D elements
+		// drawn as polygons for the sake of Widescreen Aspect hack.
+		// We assume a polygon is intended for 2D when its w = 1.
+		// For SemiTrans the w1 is stored in state.
+
 		// Textured primitives, no semi-transparency.
 		std::vector<BufferVertex> opaque_textured;
 		std::vector<PrimitiveInfo> opaque_textured_scissor;
-		std::vector<BufferVertex> opaque_sprite_textured;
-		std::vector<PrimitiveInfo> opaque_sprite_textured_scissor;
+		std::vector<BufferVertex> opaque_spr_textured; // Sprite primitives
+		std::vector<PrimitiveInfo> opaque_spr_textured_scissor;
 
 		// Textured primitives, semi-transparency enabled.
 		std::vector<BufferVertex> semi_transparent_opaque;
@@ -560,6 +564,14 @@ private:
 
 		std::vector<BufferVertex> semi_transparent;
 		std::vector<SemiTransparentState> semi_transparent_state;
+
+		// Polygon primitives, w = 1
+		std::vector<BufferVertex> opaque_poly_w1;
+		std::vector<PrimitiveInfo> opaque_poly_w1_scissor;
+		std::vector<BufferVertex> opaque_poly_w1_textured;
+		std::vector<PrimitiveInfo> opaque_poly_w1_textured_scissor;
+		std::vector<BufferVertex> semi_trans_opaque_poly_w1;
+		std::vector<PrimitiveInfo> semi_trans_opaque_poly_w1_scissor;
 
 		std::vector<Vulkan::ImageHandle> textures;
 
@@ -580,9 +592,9 @@ private:
 	float last_uv_scale_x, last_uv_scale_y;
 
 	void dispatch(const std::vector<BufferVertex> &vertices, std::vector<PrimitiveInfo> &scissors);
-	void render_opaque_primitives();
-	void render_opaque_texture_primitives(bool sprite = false);
-	void render_semi_transparent_opaque_texture_primitives();
+	void render_opaque_primitives(PrimitiveType primitive_type);
+	void render_opaque_texture_primitives(PrimitiveType primitive_type);
+	void render_semi_transparent_opaque_texture_primitives(PrimitiveType primitive_type);
 	void render_semi_transparent_primitives();
 	void reset_queue();
 
