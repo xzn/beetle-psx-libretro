@@ -554,7 +554,7 @@ private:
 		// Polygon primitives with w = 1 are used for detected 2D elements
 		// drawn as polygons for the sake of Widescreen Aspect hack.
 		// We assume a polygon is intended for 2D when its w = 1.
-		// For SemiTrans the w1 is stored in state.
+		// For SemiTrans the w1 is stored in State.
 
 		// Textured primitives, no semi-transparency.
 		std::vector<BufferVertex> opaque_textured;
