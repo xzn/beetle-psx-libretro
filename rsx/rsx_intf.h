@@ -86,6 +86,13 @@ void rsx_intf_set_display_mode(bool depth_24bpp,
                                bool is_pal,
                                bool is_480i,
                                int width_mode); //enum
+/* y_off: Offset from display area, without taking interlace into account
+ *        aka read line count for current frame.
+ * y_cur: Offset from framebuffer to read from
+ *        = ystart + y_off * (is_480i ? 2 : 1) + field
+ * field is not currently passed to this function since I don't know
+ * whether we should use vram field or output field.
+ * To match software renderer's behavior we need both. */
 void rsx_intf_set_current_readout(uint16_t y_off, uint16_t y_cur);
 
 void rsx_intf_push_triangle(float p0x, float p0y, float p0w,
