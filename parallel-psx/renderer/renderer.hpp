@@ -237,9 +237,7 @@ public:
 		render_state.width_mode = width_mode;
 	}
 
-	void set_current_readout(unsigned y_off)
-	{
-	}
+	void set_current_readout(unsigned yoffset);
 
 	void set_horizontal_overscan_cropping(bool crop_overscan)
 	{

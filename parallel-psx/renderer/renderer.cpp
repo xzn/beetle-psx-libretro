@@ -1149,6 +1149,10 @@ void Renderer::scanout()
 	cmd->end_render_pass();
 }
 
+void Renderer::set_current_readout(unsigned yoffset)
+{
+}
+
 void Renderer::hazard(StatusFlags flags)
 {
 	VkPipelineStageFlags src_stages = 0;
