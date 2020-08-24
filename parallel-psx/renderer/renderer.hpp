@@ -237,7 +237,7 @@ public:
 		render_state.width_mode = width_mode;
 	}
 
-	void set_current_readout(unsigned y_off, unsigned y_cur)
+	void set_current_readout(unsigned y_off)
 	{
 	}
 

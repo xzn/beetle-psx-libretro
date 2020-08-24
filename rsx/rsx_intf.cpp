@@ -552,7 +552,7 @@ void rsx_intf_set_display_mode(bool depth_24bpp,
    }
 }
 
-void rsx_intf_set_current_readout(uint16_t y_off, uint16_t y_cur)
+void rsx_intf_set_current_readout(uint16_t y_off)
 {
    switch (rsx_type)
    {
@@ -563,7 +563,7 @@ void rsx_intf_set_current_readout(uint16_t y_off, uint16_t y_cur)
          break;
       case RSX_VULKAN:
 #if defined(HAVE_VULKAN)
-         rsx_vulkan_set_current_readout(y_off, y_cur);
+         rsx_vulkan_set_current_readout(y_off);
 #endif
          break;
    }
