@@ -473,6 +473,7 @@ void Renderer::clear_rect(const Rect &rect, FBColor color)
 	if (texture_tracking_enabled) {
 		tracker.clearRegion(rect);
 	}
+	scanout_to_readout(rect);
 	last_scanout.reset();
 	atlas.clear_rect(rect, color);
 
@@ -1297,6 +1298,16 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 	render_state.next_readout = next_readout;
 }
 
+void Renderer::scanout_to_readout(Rect next_draw)
+{
+	render_state.display_fb_rect = compute_vram_framebuffer_rect();
+	auto &fb_rect = render_state.display_fb_rect;
+
+	if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
+		render_state.last_fb_rect == fb_rect && next_draw.intersects(fb_rect))
+		scanout_to_readout(fb_rect.height);
+}
+
 void Renderer::scanout()
 {
 	auto image = scanout_to_texture();
@@ -1592,33 +1603,9 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	};
 
 	// Naive 'do not let current scanline be drawn over' method, timings are not taken into acount.
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &fb_rect = render_state.display_fb_rect;
 	auto disp_rect = compute_display_rect();
-	if (render_state.current_readout >= disp_rect.y) {
-#if 0
-		// Pretend the scanline should be half way ahead of what's being rendered.
-		unsigned current_readout = min(render_state.current_readout + fb_rect.height / 2, fb_rect.height - 1);
-		if (!render_state.is_480i && render_state.next_readout <= current_readout)
-		{
-			Rect readout_rect = {
-				fb_rect.x, fb_rect.y + render_state.next_readout,
-				fb_rect.width, current_readout - render_state.next_readout + 1
-			};
-
-			if (rect.intersects(readout_rect))
-			{
-				unsigned next_readout = max(current_readout + 1, min((unsigned)max_y - fb_rect.y, fb_rect.height));
-				scanout_to_readout(next_readout);
-			}
-		}
-#else
-		// FIXME let's assume single buffered games only issue draw calls for now
-		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
-			render_state.last_fb_rect == fb_rect && rect.intersects(fb_rect))
-			scanout_to_readout(fb_rect.height);
-#endif
-	}
+	if (render_state.current_readout >= disp_rect.y)
+		scanout_to_readout(rect);
 
 	float z = allocate_depth(rect);
 
@@ -1961,6 +1948,7 @@ void Renderer::draw_quad(const Vertex *vertices)
 
 void Renderer::clear_quad(const Rect &rect, FBColor color, bool candidate)
 {
+	scanout_to_readout(rect);
 	last_scanout.reset();
 	auto old = atlas.set_texture_mode(TextureMode::None);
 	float z = allocate_depth(rect);
@@ -2510,6 +2498,8 @@ void Renderer::blit_vram(const Rect &dst, const Rect &src)
 		"blit_vram(dst={%i, %i, %i x %i}, src={%i, %i, %i x %i}).\n", dst.x, dst.y, dst.width, dst.height, src.x, src.y, src.width, src.height
 	);
 #endif
+
+	scanout_to_readout(dst);
 	last_scanout.reset();
 	auto domain = atlas.blit_vram(dst, src);
 
@@ -2666,6 +2656,7 @@ void Renderer::end_copy(BufferHandle handle)
 
 BufferHandle Renderer::copy_cpu_to_vram(const Rect &rect)
 {
+	scanout_to_readout(rect);
 	last_scanout.reset();
 	atlas.write_compute(Domain::Unscaled, rect);
 	VkDeviceSize size = rect.width * rect.height * sizeof(uint16_t);

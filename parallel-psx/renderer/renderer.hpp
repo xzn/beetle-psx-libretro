@@ -629,6 +629,7 @@ private:
 
 	void mipmap_framebuffer();
 	void scanout_to_readout(unsigned next_readout);
+	void scanout_to_readout(Rect next_draw);
 	Vulkan::BufferHandle quad;
 };
 }
