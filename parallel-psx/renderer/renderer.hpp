@@ -99,6 +99,7 @@ public:
 	{
 		//Rect display_mode;
 		Rect display_fb_rect;
+		Rect last_fb_rect;
 		TextureWindow texture_window;
 		Rect cached_window_rect;
 		Rect draw_rect;

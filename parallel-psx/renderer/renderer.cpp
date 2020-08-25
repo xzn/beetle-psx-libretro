@@ -888,6 +888,7 @@ ImageHandle Renderer::scanout_to_texture()
 {
 	render_state.display_fb_rect = compute_vram_framebuffer_rect();
 	auto &rect = render_state.display_fb_rect;
+	render_state.last_fb_rect = rect;
 
 	bool readout = render_state.need_readout;
 	if (readout)
@@ -1597,7 +1598,8 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	auto &fb_rect = render_state.display_fb_rect;
 	auto disp_rect = compute_display_rect();
 	// FIXME Don't know why but this comparison works?
-	if (render_state.current_readout >= disp_rect.y * 2) {
+	if (render_state.current_readout >= disp_rect.y) {
+#if 0
 		// Pretend the scanline should be half way ahead of what's being rendered.
 		unsigned current_readout = min(render_state.current_readout + fb_rect.height / 2, fb_rect.height - 1);
 		if (!render_state.is_480i && render_state.next_readout <= current_readout)
@@ -1613,6 +1615,11 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 				scanout_to_readout(next_readout);
 			}
 		}
+#else
+		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
+			render_state.last_fb_rect == fb_rect && rect.intersects(fb_rect))
+			scanout_to_readout(fb_rect.height);
+#endif
 	}
 
 	float z = allocate_depth(rect);
