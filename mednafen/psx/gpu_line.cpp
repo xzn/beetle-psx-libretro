@@ -1,3 +1,8 @@
+#include "psx.h"
+#include "../../rsx/rsx_intf.h"
+
+#include "gpu_common.h"
+
 #ifdef __cplusplus
 
 #ifndef __STDC_CONSTANT_MACROS
@@ -242,3 +247,7 @@ static void Command_DrawLine(PS_GPU *gpu, const uint32_t *cb)
    if (rsx_intf_has_software_renderer())
       DrawLine<goraud, BlendMode, MaskEval_TA>(gpu, points);
 }
+
+#define STRINGIFY(n, s) n ## _ ## s
+#define COMMAND_NAME(s) STRINGIFY(GPU_Commands_Line, s)
+CTEntry COMMAND_NAME(CMD_OP) = LINE_HELPER(CMD_OP);

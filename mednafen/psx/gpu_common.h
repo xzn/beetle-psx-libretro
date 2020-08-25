@@ -329,3 +329,29 @@ static INLINE bool LineSkipTest(PS_GPU* g, unsigned y)
 
 #define NULLCMD_FG(bm) { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 #define NULLCMD() { { NULLCMD_FG(0), NULLCMD_FG(1), NULLCMD_FG(2), NULLCMD_FG(3) }, 1, 1, true }
+
+struct CTEntry
+{
+   void (*func[4][8])(PS_GPU* g, const uint32 *cb);
+   uint8_t len;
+   uint8_t fifo_fb_len;
+   bool ss_cmd;
+};
+
+static INLINE void InvalidateTexCache(PS_GPU *gpu)
+{
+   unsigned i;
+   for (i = 0; i < 256; i++)
+      gpu->TexCache[i].Tag = ~0U;
+}
+
+static INLINE void InvalidateCache(PS_GPU *gpu)
+{
+   gpu->CLUT_Cache_VB = ~0U;
+   InvalidateTexCache(gpu);
+}
+
+void SetTPage(PS_GPU *gpu, const uint32_t cmdw);
+void Command_FBCopy(PS_GPU* g, const uint32 *cb);
+void Command_FBWrite(PS_GPU* g, const uint32 *cb);
+void Command_FBRead(PS_GPU* g, const uint32 *cb);

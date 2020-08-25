@@ -225,8 +225,6 @@ struct PS_GPU
    uint16 *vram;
 };
 
-
-
 uint16 *GPU_get_vram(void);
 
 void GPU_WriteDMA(uint32 V, uint32 addr);

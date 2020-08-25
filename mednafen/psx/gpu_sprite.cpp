@@ -1,3 +1,7 @@
+#include "psx.h"
+#include "../../rsx/rsx_intf.h"
+
+#include "gpu_common.h"
 
 template<bool textured, int BlendMode, bool TexMult, uint32_t TexMode_TA,
    bool MaskEval_TA, bool FlipX, bool FlipY>
@@ -268,3 +272,7 @@ static void Command_DrawSprite(PS_GPU *gpu, const uint32_t *cb)
          break;
    }
 }
+
+#define STRINGIFY(n, s) n ## _ ## s
+#define COMMAND_NAME(s) STRINGIFY(GPU_Commands_Sprite, s)
+CTEntry COMMAND_NAME(CMD_OP) = SPR_HELPER(CMD_OP);
