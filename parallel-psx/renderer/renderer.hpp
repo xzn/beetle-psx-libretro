@@ -130,6 +130,7 @@ public:
 
 		unsigned display_fb_xstart = 0;
 		unsigned display_fb_ystart = 0;
+		bool need_readout = false;
 		unsigned current_readout = 0;
 		unsigned next_readout = 0;
 
@@ -241,6 +242,7 @@ public:
 
 	void set_current_readout(unsigned yoffset)
 	{
+		render_state.need_readout = true;
 		render_state.current_readout = yoffset;
 	}
 

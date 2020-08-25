@@ -889,10 +889,12 @@ ImageHandle Renderer::scanout_to_texture()
 	render_state.display_fb_rect = compute_vram_framebuffer_rect();
 	auto &rect = render_state.display_fb_rect;
 
-	bool readout = render_state.next_readout;
+	bool readout = render_state.need_readout;
 	if (readout)
 	{
 		scanout_to_readout(rect.height);
+		render_state.need_readout = false;
+		render_state.current_readout = 0;
 		render_state.next_readout = 0;
 	}
 
@@ -1028,34 +1030,6 @@ ImageHandle Renderer::scanout_to_texture()
 		reuseable_scanout = device.create_image(info);
 	}
 
-	RenderPassInfo rp;
-	rp.color_attachments[0] = &reuseable_scanout->get_view();
-	rp.num_color_attachments = 1;
-	rp.store_attachments = 1;
-
-	rp.clear_color[0] = {0, 0, 0, 0};
-	//rp.clear_color[0] = {60.0f/256.0f, 230.0f/256.0f, 60.0f/256.0f, 0};
-	rp.clear_attachments = 1;
-
-	cmd->image_barrier(*reuseable_scanout, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-	                   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-	                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
-
-	cmd->begin_render_pass(rp);
-	cmd->set_quad_state();
-
-	auto old_vp = cmd->get_viewport();
-	VkViewport new_vp = {display_rect.x * (float) render_scale,
-	                     display_rect.y * (float) render_scale,
-	                     rect.width * (float) render_scale,
-	                     rect.height * (float) render_scale,
-	                     old_vp.minDepth,
-	                     old_vp.maxDepth};
-
-	cmd->set_viewport(new_vp);
-
-	bool dither = render_state.scanout_mode == ScanoutMode::ABGR1555_Dither;
-
 	struct Push
 	{
 		float offset[2];
@@ -1128,6 +1102,40 @@ ImageHandle Renderer::scanout_to_texture()
 	auto &output_param = output_params[output_type];
 	assert(output_param.type == output_type);
 
+	RenderPassInfo rp;
+	rp.color_attachments[0] = &reuseable_scanout->get_view();
+	rp.num_color_attachments = 1;
+	rp.store_attachments = 1;
+
+	rp.clear_color[0] = {0, 0, 0, 0};
+	//rp.clear_color[0] = {60.0f/256.0f, 230.0f/256.0f, 60.0f/256.0f, 0};
+	rp.clear_attachments = 1;
+
+	if (READOUT == output_type)
+		cmd->image_barrier(output_param.src->get_image(),
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+
+	cmd->image_barrier(*reuseable_scanout, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+	                   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+	                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+
+	cmd->begin_render_pass(rp);
+	cmd->set_quad_state();
+
+	auto old_vp = cmd->get_viewport();
+	VkViewport new_vp = {display_rect.x * (float) render_scale,
+	                     display_rect.y * (float) render_scale,
+	                     rect.width * (float) render_scale,
+	                     rect.height * (float) render_scale,
+	                     old_vp.minDepth,
+	                     old_vp.maxDepth};
+
+	cmd->set_viewport(new_vp);
+
+	bool dither = render_state.scanout_mode == ScanoutMode::ABGR1555_Dither;
+
 	if (dither)
 		cmd->set_program(*output_param.program_dither);
 	else
@@ -1176,9 +1184,16 @@ ImageHandle Renderer::scanout_to_texture()
 	cmd->set_primitive_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
 	counters.draw_calls++;
 	counters.vertices += 4;
+
 	cmd->draw(4);
 
 	cmd->end_render_pass();
+
+	if (READOUT == output_type)
+		cmd->image_barrier(output_param.src->get_image(),
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
 
 	cmd->image_barrier(*reuseable_scanout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 	                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
@@ -1197,13 +1212,13 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 	if (bpp24)
 		return;
 
-	auto extent_y = (int)next_readout - render_state.next_readout;
-	if (extent_y <= 0)
+	if (next_readout <= render_state.next_readout)
 		return;
 
 	render_state.display_fb_rect = compute_vram_framebuffer_rect();
 	auto &fb_rect = render_state.display_fb_rect;
 
+	auto extent_y = next_readout - render_state.next_readout;
 	Rect src_rect = {
 		fb_rect.x, fb_rect.y + render_state.next_readout,
 		fb_rect.width, extent_y};
@@ -1272,7 +1287,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		cmd->get_command_buffer(),
 		src->get_image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 		dst->get_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		info.levels, regions);
+		1, regions);
 
 	cmd->image_barrier(
 		*src,
@@ -1578,19 +1593,19 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	};
 
 	// Naive 'do not let current scanline be drawn over' method, timings are not taken into acount.
-	if (!render_state.is_480i && render_state.next_readout <= render_state.current_readout)
+	render_state.display_fb_rect = compute_vram_framebuffer_rect();
+	auto &fb_rect = render_state.display_fb_rect;
+	unsigned current_readout = min(render_state.current_readout + fb_rect.height / 2, fb_rect.height - 1);
+	if (!render_state.is_480i && render_state.next_readout <= current_readout)
 	{
-		render_state.display_fb_rect = compute_vram_framebuffer_rect();
-		auto &fb_rect = render_state.display_fb_rect;
-
 		Rect readout_rect = {
 			fb_rect.x, fb_rect.y + render_state.next_readout,
-			fb_rect.width, render_state.current_readout - render_state.next_readout + 1
+			fb_rect.width, current_readout - render_state.next_readout + 1
 		};
 
 		if (rect.intersects(readout_rect))
 		{
-			unsigned next_readout = max(render_state.current_readout + 1, (unsigned)max_y - fb_rect.y);
+			unsigned next_readout = max(current_readout + 1, min((unsigned)max_y - fb_rect.y, fb_rect.height));
 			scanout_to_readout(next_readout);
 		}
 	}
