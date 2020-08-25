@@ -890,12 +890,10 @@ ImageHandle Renderer::scanout_to_texture()
 	auto &rect = render_state.display_fb_rect;
 	render_state.last_fb_rect = rect;
 
-	bool readout = render_state.need_readout;
+	bool readout = render_state.next_readout;
 	if (readout)
 	{
 		scanout_to_readout(rect.height);
-		render_state.need_readout = false;
-		render_state.current_readout = 0;
 		render_state.next_readout = 0;
 	}
 
@@ -1094,7 +1092,7 @@ ImageHandle Renderer::scanout_to_texture()
 			READOUT,
 			pipelines.scaled_quad_blitter,
 			pipelines.scaled_dither_quad_blitter,
-			readout_views[0].get(),
+			readout_views.size() ? readout_views[0].get() : nullptr,
 			StockSampler::LinearClamp,
 			&readout_push
 		}
