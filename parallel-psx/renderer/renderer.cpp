@@ -985,13 +985,13 @@ ImageHandle Renderer::scanout_to_texture()
 	{
 		output_type = SSAA;
 	}
-	else if (readout)
-	{
-		output_type = READOUT;
-	}
 	else if (render_state.adaptive_smoothing && scaling > 1)
 	{
 		output_type = ADAPTIVE_SMOOTHING;
+	}
+	else if (readout)
+	{
+		output_type = READOUT;
 	}
 
 	if (ADAPTIVE_SMOOTHING == output_type)
@@ -1595,10 +1595,7 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	render_state.display_fb_rect = compute_vram_framebuffer_rect();
 	auto &fb_rect = render_state.display_fb_rect;
 	auto disp_rect = compute_display_rect();
-	// FIXME Don't know why but this comparison works?
 	if (render_state.current_readout >= disp_rect.y) {
-		// This doesn't work. It's meant to fix flickering in single buffered games
-		// but other games start to tear.
 #if 0
 		// Pretend the scanline should be half way ahead of what's being rendered.
 		unsigned current_readout = min(render_state.current_readout + fb_rect.height / 2, fb_rect.height - 1);
@@ -1616,9 +1613,7 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 			}
 		}
 #else
-		// Bunch of checks to detect single buffering
-		// Original intent is to output per scanline but so far timing issues remains
-		// Perhaps Vulkan backend code is correct and the fault lies in core.
+		// FIXME let's assume single buffered games only issue draw calls for now
 		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
 			render_state.last_fb_rect == fb_rect && rect.intersects(fb_rect))
 			scanout_to_readout(fb_rect.height);
