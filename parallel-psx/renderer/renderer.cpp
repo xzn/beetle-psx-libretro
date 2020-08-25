@@ -886,6 +886,16 @@ ImageHandle Renderer::scanout_vram_to_texture(bool scaled)
 
 ImageHandle Renderer::scanout_to_texture()
 {
+	render_state.display_fb_rect = compute_vram_framebuffer_rect();
+	auto &rect = render_state.display_fb_rect;
+
+	bool readout = render_state.next_readout;
+	if (readout)
+	{
+		scanout_to_readout(rect.height);
+		render_state.next_readout = 0;
+	}
+
 	atlas.flush_render_pass();
 	if (texture_tracking_enabled) {
 		tracker.endFrame();
@@ -893,9 +903,6 @@ ImageHandle Renderer::scanout_to_texture()
 
 	if (last_scanout)
 		return last_scanout;
-
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &rect = render_state.display_fb_rect;
 
 	if (rect.width == 0 || rect.height == 0 || !render_state.display_on)
 	{
@@ -1124,7 +1131,95 @@ ImageHandle Renderer::scanout_to_texture()
 
 void Renderer::scanout_to_readout(unsigned next_readout)
 {
+	bool bpp24 = render_state.scanout_mode == ScanoutMode::BGR24;
+	// TODO support bpp24
+	if (bpp24)
+		return;
 
+	auto extent_y = (int)next_readout - render_state.next_readout;
+	if (extent_y <= 0)
+		return;
+
+	render_state.display_fb_rect = compute_vram_framebuffer_rect();
+	auto &fb_rect = render_state.display_fb_rect;
+
+	Rect src_rect = {
+		fb_rect.x, fb_rect.y + render_state.next_readout,
+		fb_rect.width, extent_y};
+
+	auto &src = scaled_framebuffer;
+	auto &dst = readout_framebuffer;
+	auto &src_views = scaled_views;
+	auto &dst_views = readout_views;
+	auto readout_format = src->get_format();
+	auto info = ImageCreateInfo::render_target(
+		fb_rect.width * scaling,
+		fb_rect.height * scaling,
+		readout_format);
+
+	info.levels = src->get_create_info().levels;
+	if (!dst ||
+		dst->get_width() != info.width ||
+		dst->get_height() != info.height ||
+		dst->get_format() != info.format)
+	{
+		info.initial_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		dst = device.create_image(info);
+
+		dst_views.clear();
+		auto view_info = dst->get_view().get_create_info();
+		for (unsigned i = 0; i < info.levels; i++)
+		{
+			view_info.base_level = i;
+			view_info.levels = 1;
+			dst_views.push_back(device.create_image_view(view_info));
+		}
+	}
+
+	atlas.read_fragment(Domain::Scaled, src_rect);
+
+	ensure_command_buffer();
+
+	// TODO support cmd->draw as fallback
+	cmd->image_barrier(
+		*src,
+		VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+
+	VkImageCopy regions[32] = {};
+	for (uint32_t i = 0; i < 1; i++) // i < info.levels
+	{
+		VkOffset3D dest_offset = {
+			0,
+			int((render_state.next_readout * scaling) >> i),
+			0};
+		VkOffset3D src_offset = {
+			int((src_rect.x * scaling) >> i),
+			int((src_rect.y * scaling) >> i),
+			0};
+		VkExtent3D extent = {
+			(src_rect.width * scaling) >> i,
+			(src_rect.height * scaling) >> i,
+			1};
+		VkImageSubresourceLayers subres = {VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1};
+		regions[i] = VkImageCopy{ subres, src_offset, subres, dest_offset, extent };
+	}
+
+	vkCmdCopyImage(
+		cmd->get_command_buffer(),
+		src->get_image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		dst->get_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		info.levels, regions);
+
+	cmd->image_barrier(
+		*src,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0);
+
+	render_state.next_readout = next_readout;
 }
 
 void Renderer::scanout()
