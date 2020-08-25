@@ -130,6 +130,8 @@ public:
 
 		unsigned display_fb_xstart = 0;
 		unsigned display_fb_ystart = 0;
+		unsigned current_readout = 0;
+		unsigned next_readout = 0;
 
 		TextureMode texture_mode = TextureMode::None;
 		SemiTransparentMode semi_transparent = SemiTransparentMode::None;
@@ -237,7 +239,10 @@ public:
 		render_state.width_mode = width_mode;
 	}
 
-	void set_current_readout(unsigned yoffset);
+	void set_current_readout(unsigned yoffset)
+	{
+		render_state.current_readout = yoffset;
+	}
 
 	void set_horizontal_overscan_cropping(bool crop_overscan)
 	{
@@ -402,6 +407,8 @@ private:
 	Vulkan::ImageHandle framebuffer;
 	Vulkan::Semaphore scanout_semaphore;
 	std::vector<Vulkan::ImageViewHandle> scaled_views;
+	Vulkan::ImageHandle readout_framebuffer;
+	std::vector<Vulkan::ImageViewHandle> readout_views;
 	FBAtlas atlas;
 	bool texture_tracking_enabled = false;
 	TextureTracker tracker;
@@ -620,6 +627,7 @@ private:
 	Rect compute_vram_framebuffer_rect();
 
 	void mipmap_framebuffer();
+	void scanout_to_readout(unsigned next_readout);
 	Vulkan::BufferHandle quad;
 };
 }

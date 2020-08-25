@@ -1122,6 +1122,11 @@ ImageHandle Renderer::scanout_to_texture()
 	return reuseable_scanout;
 }
 
+void Renderer::scanout_to_readout(unsigned next_readout)
+{
+
+}
+
 void Renderer::scanout()
 {
 	auto image = scanout_to_texture();
@@ -1147,10 +1152,6 @@ void Renderer::scanout()
 	counters.vertices += 4;
 	cmd->draw(4);
 	cmd->end_render_pass();
-}
-
-void Renderer::set_current_readout(unsigned yoffset)
-{
 }
 
 void Renderer::hazard(StatusFlags flags)
@@ -1419,6 +1420,24 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	const Rect rect = {
 		unsigned(min_x), unsigned(min_y), unsigned(max_x) - unsigned(min_x), unsigned(max_y) - unsigned(min_y),
 	};
+
+	// Naive 'do not let current scanline be drawn over' method, timings are not taken into acount.
+	if (!render_state.is_480i && render_state.next_readout <= render_state.current_readout)
+	{
+		render_state.display_fb_rect = compute_vram_framebuffer_rect();
+		auto &fb_rect = render_state.display_fb_rect;
+
+		Rect readout_rect = {
+			fb_rect.x, fb_rect.y + render_state.next_readout,
+			fb_rect.width, render_state.current_readout - render_state.next_readout + 1
+		};
+
+		if (rect.intersects(readout_rect))
+		{
+			unsigned next_readout = max(render_state.current_readout + 1, (unsigned)max_y - fb_rect.y);
+			scanout_to_readout(next_readout);
+		}
+	}
 
 	float z = allocate_depth(rect);
 
