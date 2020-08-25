@@ -1253,7 +1253,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		}
 	}
 
-	atlas.read_fragment(Domain::Scaled, src_rect);
+	atlas.read_transfer(Domain::Scaled, src_rect);
 
 	ensure_command_buffer();
 
@@ -1595,18 +1595,23 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	// Naive 'do not let current scanline be drawn over' method, timings are not taken into acount.
 	render_state.display_fb_rect = compute_vram_framebuffer_rect();
 	auto &fb_rect = render_state.display_fb_rect;
-	unsigned current_readout = min(render_state.current_readout + fb_rect.height / 2, fb_rect.height - 1);
-	if (!render_state.is_480i && render_state.next_readout <= current_readout)
-	{
-		Rect readout_rect = {
-			fb_rect.x, fb_rect.y + render_state.next_readout,
-			fb_rect.width, current_readout - render_state.next_readout + 1
-		};
-
-		if (rect.intersects(readout_rect))
+	auto disp_rect = compute_display_rect();
+	// FIXME Don't know why but this comparison works?
+	if (render_state.current_readout >= disp_rect.y * 2) {
+		// Pretend the scanline should be half way ahead of what's being rendered.
+		unsigned current_readout = min(render_state.current_readout + fb_rect.height / 2, fb_rect.height - 1);
+		if (!render_state.is_480i && render_state.next_readout <= current_readout)
 		{
-			unsigned next_readout = max(current_readout + 1, min((unsigned)max_y - fb_rect.y, fb_rect.height));
-			scanout_to_readout(next_readout);
+			Rect readout_rect = {
+				fb_rect.x, fb_rect.y + render_state.next_readout,
+				fb_rect.width, current_readout - render_state.next_readout + 1
+			};
+
+			if (rect.intersects(readout_rect))
+			{
+				unsigned next_readout = max(current_readout + 1, min((unsigned)max_y - fb_rect.y, fb_rect.height));
+				scanout_to_readout(next_readout);
+			}
 		}
 	}
 
