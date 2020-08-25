@@ -99,6 +99,7 @@ public:
 	{
 		//Rect display_mode;
 		Rect display_fb_rect;
+		bool valid_fb_rect = false;
 		Rect last_fb_rect;
 		TextureWindow texture_window;
 		Rect cached_window_rect;
@@ -210,6 +211,7 @@ public:
 	void set_vram_framebuffer_coords(unsigned xstart, unsigned ystart)
 	{
 		last_scanout.reset();
+		render_state.valid_fb_rect = false;
 
 		render_state.display_fb_xstart = xstart;
 		render_state.display_fb_ystart = ystart;
@@ -217,12 +219,16 @@ public:
 
 	void set_horizontal_display_range(int x1, int x2)
 	{
+		render_state.valid_fb_rect = false;
+
 		render_state.horiz_start = x1;
 		render_state.horiz_end = x2;
 	}
 
 	void set_vertical_display_range(int y1, int y2)
 	{
+		render_state.valid_fb_rect = false;
+
 		render_state.vert_start = y1;
 		render_state.vert_end = y2;
 	}
@@ -232,6 +238,7 @@ public:
 		//if (rect != render_state.display_mode || render_state.scanout_mode != mode)
 		//	last_scanout.reset();
 		last_scanout.reset();
+		render_state.valid_fb_rect = false;
 
 		//render_state.display_mode = rect;
 		render_state.scanout_mode = mode;
@@ -626,7 +633,7 @@ private:
 	Vulkan::ImageHandle reuseable_scanout;
 	DisplayRect compute_display_rect();
 
-	Rect compute_vram_framebuffer_rect();
+	Rect &compute_vram_framebuffer_rect();
 
 	void mipmap_framebuffer();
 	void scanout_to_readout(unsigned next_readout);

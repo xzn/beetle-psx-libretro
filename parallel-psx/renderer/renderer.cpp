@@ -576,8 +576,7 @@ void Renderer::copy_vram_to_cpu_synchronous(const Rect &rect, uint16_t *vram)
 
 BufferHandle Renderer::scanout_to_buffer(bool draw_area, unsigned &width, unsigned &height)
 {
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &rect = draw_area ? render_state.draw_rect : render_state.display_fb_rect;
+	auto &rect = draw_area ? render_state.draw_rect : compute_vram_framebuffer_rect();
 	if (rect.width == 0 || rect.height == 0 || !render_state.display_on)
 		return BufferHandle(nullptr);
 
@@ -608,8 +607,7 @@ BufferHandle Renderer::scanout_to_buffer(bool draw_area, unsigned &width, unsign
 
 void Renderer::mipmap_framebuffer()
 {
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &rect = render_state.display_fb_rect;
+	auto &rect = compute_vram_framebuffer_rect();
 	unsigned levels = scaled_views.size();
 	for (unsigned i = 1; i <= levels; i++)
 	{
@@ -687,8 +685,11 @@ void Renderer::mipmap_framebuffer()
 	}
 }
 
-Rect Renderer::compute_vram_framebuffer_rect()
+Rect &Renderer::compute_vram_framebuffer_rect()
 {
+	if (render_state.valid_fb_rect)
+		return render_state.display_fb_rect;
+
 	unsigned clock_div;
 	switch (render_state.width_mode)
 	{
@@ -716,10 +717,11 @@ Rect Renderer::compute_vram_framebuffer_rect()
 	unsigned fb_height = (unsigned) (render_state.vert_end - render_state.vert_start);
 	fb_height *= render_state.is_480i ? 2 : 1;
 
-	return {render_state.display_fb_xstart,
-	        render_state.display_fb_ystart,
-	        fb_width,
-	        fb_height};
+	return render_state.valid_fb_rect = true, render_state.display_fb_rect = {
+		render_state.display_fb_xstart,
+		render_state.display_fb_ystart,
+		fb_width,
+		fb_height };
 }
 
 Renderer::DisplayRect Renderer::compute_display_rect()
@@ -887,8 +889,7 @@ ImageHandle Renderer::scanout_vram_to_texture(bool scaled)
 
 ImageHandle Renderer::scanout_to_texture()
 {
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &rect = render_state.display_fb_rect;
+	auto &rect = compute_vram_framebuffer_rect();
 	render_state.last_fb_rect = rect;
 
 	bool readout = render_state.next_readout;
@@ -1216,8 +1217,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 	if (next_readout <= render_state.next_readout)
 		return;
 
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &fb_rect = render_state.display_fb_rect;
+	auto &fb_rect = compute_vram_framebuffer_rect();
 
 	auto extent_y = next_readout - render_state.next_readout;
 	Rect src_rect = {
@@ -1301,12 +1301,15 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 
 void Renderer::scanout_to_readout(Rect next_draw)
 {
-	render_state.display_fb_rect = compute_vram_framebuffer_rect();
-	auto &fb_rect = render_state.display_fb_rect;
-
-	if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
-		render_state.last_fb_rect == fb_rect && next_draw.intersects(fb_rect))
-		scanout_to_readout(fb_rect.height);
+	//HACK bunch of test to detect games running in single buffered mode and
+	//do an early scanout to avoid flickering.
+	if (render_state.current_readout > 0)
+	{
+		auto &fb_rect = compute_vram_framebuffer_rect();
+		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
+			render_state.last_fb_rect == fb_rect && next_draw.intersects(fb_rect))
+			scanout_to_readout(fb_rect.height);
+	}
 }
 
 void Renderer::scanout()
@@ -1603,11 +1606,7 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 		unsigned(min_x), unsigned(min_y), unsigned(max_x) - unsigned(min_x), unsigned(max_y) - unsigned(min_y),
 	};
 
-	// Naive 'do not let current scanline be drawn over' method, timings are not taken into acount.
-	auto disp_rect = compute_display_rect();
-	if (render_state.current_readout >= disp_rect.y)
-		scanout_to_readout(rect);
-
+	scanout_to_readout(rect);
 	float z = allocate_depth(rect);
 
 	// Look up the hd texture index
