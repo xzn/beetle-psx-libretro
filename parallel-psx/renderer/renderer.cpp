@@ -903,8 +903,9 @@ ImageHandle Renderer::scanout_to_texture()
 		tracker.endFrame();
 	}
 
-	if (last_scanout)
+	if (readout == render_state.last_output_readout && last_scanout)
 		return last_scanout;
+	render_state.last_output_readout = readout;
 
 	if (rect.width == 0 || rect.height == 0 || !render_state.display_on)
 	{

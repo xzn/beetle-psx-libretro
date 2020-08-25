@@ -133,6 +133,7 @@ public:
 		unsigned display_fb_ystart = 0;
 		unsigned current_readout = 0;
 		unsigned next_readout = 0;
+		bool last_output_readout = false;
 
 		TextureMode texture_mode = TextureMode::None;
 		SemiTransparentMode semi_transparent = SemiTransparentMode::None;
