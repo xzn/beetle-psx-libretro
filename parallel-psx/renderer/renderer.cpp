@@ -946,9 +946,10 @@ ImageHandle Renderer::scanout_to_texture()
 	}
 
 	bool bpp24 = render_state.scanout_mode == ScanoutMode::BGR24;
+	bool yuv24 = bpp24 && render_state.scanout_mdec_filter == ScanoutFilter::MDEC_YUV;
 	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
 
-	if (bpp24 || ssaa)
+	if (!readout && (bpp24 || ssaa))
 	{
 		auto tmp = rect;
 		if (bpp24)
@@ -963,7 +964,36 @@ ImageHandle Renderer::scanout_to_texture()
 
 	ensure_command_buffer();
 
-	if (render_state.adaptive_smoothing && !bpp24 && !ssaa && scaling != 1)
+	enum OutputType {
+		BPP24,
+		YUV24,
+		SSAA,
+		ADAPTIVE_SMOOTHING,
+		UNSCALED,
+		READOUT,
+	} output_type = UNSCALED;
+
+	if (bpp24)
+	{
+		if (yuv24)
+			output_type = YUV24;
+		else
+			output_type = BPP24;
+	}
+	else if (ssaa)
+	{
+		output_type = SSAA;
+	}
+	else if (readout)
+	{
+		output_type = READOUT;
+	}
+	else if (render_state.adaptive_smoothing && scaling > 1)
+	{
+		output_type = ADAPTIVE_SMOOTHING;
+	}
+
+	if (ADAPTIVE_SMOOTHING == output_type)
 		mipmap_framebuffer();
 
 	if (scanout_semaphore)
@@ -1026,42 +1056,87 @@ ImageHandle Renderer::scanout_to_texture()
 
 	bool dither = render_state.scanout_mode == ScanoutMode::ABGR1555_Dither;
 
-	if (bpp24)
+	struct Push
 	{
-		if (render_state.scanout_mdec_filter == ScanoutFilter::MDEC_YUV)
-			cmd->set_program(*pipelines.bpp24_yuv_quad_blitter);
-		else
-			cmd->set_program(*pipelines.bpp24_quad_blitter);
-		cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestClamp);
-	}
-	else if (ssaa)
-	{
-		if (dither)
-			cmd->set_program(*pipelines.unscaled_dither_quad_blitter);
-		else
-			cmd->set_program(*pipelines.unscaled_quad_blitter);
+		float offset[2];
+		float scale[2];
+	};
 
-		cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestClamp);
-	}
-	else if (!render_state.adaptive_smoothing || scaling == 1)
-	{
-		if (dither)
-			cmd->set_program(*pipelines.scaled_dither_quad_blitter);
-		else
-			cmd->set_program(*pipelines.scaled_quad_blitter);
+	Push fb_push = { { float(rect.x) / FB_WIDTH, float(rect.y) / FB_HEIGHT },
+		          { float(rect.width) / FB_WIDTH, float(rect.height) / FB_HEIGHT } };
 
-		cmd->set_texture(0, 0, *scaled_views[0], StockSampler::LinearClamp);
-	}
+	Push readout_push = { { 0, 0 }, { 1, 1 } };
+
+	struct OutputParam {
+		OutputType type;
+		Vulkan::Program *program;
+		Vulkan::Program *program_dither;
+		Vulkan::ImageView *src;
+		Vulkan::StockSampler sampler;
+		Push *push;
+	} output_params[] = {
+		{
+			BPP24,
+			pipelines.bpp24_quad_blitter,
+			nullptr,
+			&framebuffer->get_view(),
+			StockSampler::NearestClamp,
+			&fb_push
+		},
+		{
+			YUV24,
+			pipelines.bpp24_yuv_quad_blitter,
+			nullptr,
+			&framebuffer->get_view(),
+			StockSampler::NearestClamp,
+			&fb_push
+		},
+		{
+			SSAA,
+			pipelines.unscaled_quad_blitter,
+			pipelines.unscaled_dither_quad_blitter,
+			&framebuffer->get_view(),
+			StockSampler::NearestClamp,
+			&fb_push
+		},
+		{
+			ADAPTIVE_SMOOTHING,
+			pipelines.mipmap_resolve,
+			pipelines.mipmap_dither_resolve,
+			&scaled_framebuffer->get_view(),
+			StockSampler::TrilinearClamp,
+			&fb_push
+		},
+		{
+			UNSCALED,
+			pipelines.scaled_quad_blitter,
+			pipelines.scaled_dither_quad_blitter,
+			scaled_views[0].get(),
+			StockSampler::LinearClamp,
+			&fb_push
+		},
+		{
+			READOUT,
+			pipelines.scaled_quad_blitter,
+			pipelines.scaled_dither_quad_blitter,
+			readout_views[0].get(),
+			StockSampler::LinearClamp,
+			&readout_push
+		}
+	};
+
+	auto &output_param = output_params[output_type];
+	assert(output_param.type == output_type);
+
+	if (dither)
+		cmd->set_program(*output_param.program_dither);
 	else
-	{
-		if (dither)
-			cmd->set_program(*pipelines.mipmap_dither_resolve);
-		else
-			cmd->set_program(*pipelines.mipmap_resolve);
+		cmd->set_program(*output_param.program);
 
-		cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::TrilinearClamp);
+	cmd->set_texture(0, 0, *output_param.src, output_param.sampler);
+
+	if (ADAPTIVE_SMOOTHING == output_type)
 		cmd->set_texture(0, 1, bias_framebuffer->get_view(), StockSampler::LinearClamp);
-	}
 
 	if (dither)
 	{
@@ -1096,21 +1171,7 @@ ImageHandle Renderer::scanout_to_texture()
 	}
 
 	cmd->set_vertex_binding(0, *quad, 0, 2);
-	struct Push
-	{
-		float offset[2];
-		float scale[2];
-		float uv_min[2];
-		float uv_max[2];
-		float max_bias;
-	};
-	Push push = { { float(rect.x) / FB_WIDTH, float(rect.y) / FB_HEIGHT },
-		          { float(rect.width) / FB_WIDTH, float(rect.height) / FB_HEIGHT },
-		          { (rect.x + 0.5f) / FB_WIDTH, (rect.y + 0.5f) / FB_HEIGHT },
-		          { (rect.x + rect.width - 0.5f) / FB_WIDTH, (rect.y + rect.height - 0.5f) / FB_HEIGHT },
-		          float(scaled_views.size() - 1) };
-
-	cmd->push_constants(&push, 0, sizeof(push));
+	cmd->push_constants(output_param.push, 0, sizeof(Push));
 	cmd->set_vertex_attrib(0, 0, VK_FORMAT_R8G8_SNORM, 0);
 	cmd->set_primitive_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
 	counters.draw_calls++;
