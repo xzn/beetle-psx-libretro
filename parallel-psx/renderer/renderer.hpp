@@ -135,6 +135,11 @@ public:
 		unsigned current_readout = 0;
 		unsigned next_readout = 0;
 		bool last_output_readout = false;
+		enum ReadoutType
+		{
+			READOUT,
+			READOUT_SSAA,
+		} readout_type;
 
 		TextureMode texture_mode = TextureMode::None;
 		SemiTransparentMode semi_transparent = SemiTransparentMode::None;
@@ -636,6 +641,7 @@ private:
 	Rect &compute_vram_framebuffer_rect();
 
 	void mipmap_framebuffer();
+	void mipmap_readout();
 	void scanout_to_readout(unsigned next_readout);
 	void scanout_to_readout(Rect next_draw);
 	Vulkan::BufferHandle quad;

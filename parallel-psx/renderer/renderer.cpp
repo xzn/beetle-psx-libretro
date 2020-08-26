@@ -685,6 +685,23 @@ void Renderer::mipmap_framebuffer()
 	}
 }
 
+void Renderer::mipmap_readout()
+{
+	unsigned levels = readout_views.size();
+	if (!levels)
+		return;
+
+	// TODO FIXME How are you actually supposed to use this?
+	// I'm getting tons of validation errors.
+	cmd->barrier_prepare_generate_mipmap(*readout_framebuffer,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+	cmd->generate_mipmap(*readout_framebuffer);
+	cmd->image_barrier(*readout_framebuffer,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+}
+
 Rect &Renderer::compute_vram_framebuffer_rect()
 {
 	if (render_state.valid_fb_rect)
@@ -952,6 +969,7 @@ ImageHandle Renderer::scanout_to_texture()
 	bool bpp24 = render_state.scanout_mode == ScanoutMode::BGR24;
 	bool yuv24 = bpp24 && render_state.scanout_mdec_filter == ScanoutFilter::MDEC_YUV;
 	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
+	bool adaptive_smoothing = render_state.adaptive_smoothing && scaling > 1;
 
 	if (!readout && (bpp24 || ssaa))
 	{
@@ -975,6 +993,7 @@ ImageHandle Renderer::scanout_to_texture()
 		ADAPTIVE_SMOOTHING,
 		UNSCALED,
 		READOUT,
+		READOUT_SSAA,
 	} output_type = UNSCALED;
 
 	if (bpp24)
@@ -984,21 +1003,27 @@ ImageHandle Renderer::scanout_to_texture()
 		else
 			output_type = BPP24;
 	}
+	else if (readout)
+	{
+		if (RenderState::READOUT_SSAA == render_state.readout_type)
+			output_type = READOUT_SSAA;
+		else
+		output_type = READOUT;
+	}
 	else if (ssaa)
 	{
 		output_type = SSAA;
 	}
-	else if (render_state.adaptive_smoothing && scaling > 1)
+	else if (adaptive_smoothing)
 	{
 		output_type = ADAPTIVE_SMOOTHING;
-	}
-	else if (readout)
-	{
-		output_type = READOUT;
 	}
 
 	if (ADAPTIVE_SMOOTHING == output_type)
 		mipmap_framebuffer();
+	
+	// if (READOUT_SSAA == output_type)
+	// 	mipmap_readout();
 
 	if (scanout_semaphore)
 	{
@@ -1036,10 +1061,16 @@ ImageHandle Renderer::scanout_to_texture()
 	{
 		float offset[2];
 		float scale[2];
+		float uv_min[2];
+		float uv_max[2];
+		float max_bias;
 	};
 
 	Push fb_push = { { float(rect.x) / FB_WIDTH, float(rect.y) / FB_HEIGHT },
-		          { float(rect.width) / FB_WIDTH, float(rect.height) / FB_HEIGHT } };
+		          { float(rect.width) / FB_WIDTH, float(rect.height) / FB_HEIGHT },
+				  { (rect.x + 0.5f) / FB_WIDTH, (rect.y + 0.5f) / FB_HEIGHT },
+		          { (rect.x + rect.width - 0.5f) / FB_WIDTH, (rect.y + rect.height - 0.5f) / FB_HEIGHT },
+		          float(scaled_views.size() - 1) };
 
 	Push readout_push = { { 0, 0 }, { 1, 1 } };
 
@@ -1098,6 +1129,14 @@ ImageHandle Renderer::scanout_to_texture()
 			readout_views.size() ? readout_views[0].get() : nullptr,
 			StockSampler::LinearClamp,
 			&readout_push
+		},
+		{
+			READOUT_SSAA,
+			pipelines.unscaled_quad_blitter,
+			pipelines.unscaled_dither_quad_blitter,
+			readout_views.size() ? readout_views.back().get() : nullptr,
+			StockSampler::NearestClamp,
+			&readout_push
 		}
 	};
 
@@ -1113,7 +1152,7 @@ ImageHandle Renderer::scanout_to_texture()
 	//rp.clear_color[0] = {60.0f/256.0f, 230.0f/256.0f, 60.0f/256.0f, 0};
 	rp.clear_attachments = 1;
 
-	if (READOUT == output_type)
+	if (READOUT == output_type || READOUT_SSAA == output_type)
 		cmd->image_barrier(output_param.src->get_image(),
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1191,7 +1230,7 @@ ImageHandle Renderer::scanout_to_texture()
 
 	cmd->end_render_pass();
 
-	if (READOUT == output_type)
+	if (READOUT == output_type || READOUT_SSAA == output_type)
 		cmd->image_barrier(output_param.src->get_image(),
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
@@ -1217,6 +1256,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 	if (next_readout <= render_state.next_readout)
 		return;
 
+	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
 	auto &fb_rect = compute_vram_framebuffer_rect();
 
 	auto extent_y = next_readout - render_state.next_readout;
@@ -1224,14 +1264,51 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		fb_rect.x, fb_rect.y + render_state.next_readout,
 		fb_rect.width, extent_y};
 
-	auto &src = scaled_framebuffer;
+	using OutputType = RenderState::ReadoutType;
+	OutputType output_type = RenderState::READOUT;
+	if (ssaa)
+		output_type = RenderState::READOUT_SSAA;
+
+	struct OutputParam
+	{
+		OutputType type;
+		ImageHandle src;
+		VkFormat format;
+		unsigned width;
+		unsigned height;
+		Domain domain;
+		unsigned scale_shift;
+	} output_params[] = {
+		{
+			RenderState::READOUT,
+			scaled_framebuffer,
+			scaled_framebuffer->get_format(),
+			fb_rect.width * scaling,
+			fb_rect.height * scaling,
+			Domain::Scaled,
+			(unsigned)trailing_zeroes(scaling),
+		},
+		{
+			RenderState::READOUT,
+			framebuffer,
+			framebuffer->get_format(),
+			fb_rect.width,
+			fb_rect.height,
+			Domain::Unscaled,
+			0,
+		}
+	};
+
+	assert(output_params[output_type] == output_type);
+	auto &output_param = output_params[output_type];
+
+	auto src = output_param.src;
 	auto &dst = readout_framebuffer;
-	auto &src_views = scaled_views;
 	auto &dst_views = readout_views;
-	auto readout_format = src->get_format();
+	auto readout_format = output_param.format;
 	auto info = ImageCreateInfo::render_target(
-		fb_rect.width * scaling,
-		fb_rect.height * scaling,
+		output_param.width,
+		output_param.height,
 		readout_format);
 
 	info.levels = src->get_create_info().levels;
@@ -1241,7 +1318,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		dst->get_format() != info.format)
 	{
 		info.initial_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		dst = device.create_image(info);
 
 		dst_views.clear();
@@ -1254,7 +1331,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		}
 	}
 
-	atlas.read_transfer(Domain::Scaled, src_rect);
+	atlas.read_transfer(output_param.domain, src_rect);
 
 	ensure_command_buffer();
 
@@ -1270,15 +1347,15 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 	{
 		VkOffset3D dest_offset = {
 			0,
-			int((render_state.next_readout * scaling) >> i),
+			int(render_state.next_readout << (output_param.scale_shift - i)),
 			0};
 		VkOffset3D src_offset = {
-			int((src_rect.x * scaling) >> i),
-			int((src_rect.y * scaling) >> i),
+			int(src_rect.x << (output_param.scale_shift - i)),
+			int(src_rect.y << (output_param.scale_shift - i)),
 			0};
 		VkExtent3D extent = {
-			(src_rect.width * scaling) >> i,
-			(src_rect.height * scaling) >> i,
+			src_rect.width << (output_param.scale_shift - i),
+			src_rect.height << (output_param.scale_shift - i),
 			1};
 		VkImageSubresourceLayers subres = {VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1};
 		regions[i] = VkImageCopy{ subres, src_offset, subres, dest_offset, extent };
@@ -1297,6 +1374,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0);
 
 	render_state.next_readout = next_readout;
+	render_state.readout_type = output_type;
 }
 
 void Renderer::scanout_to_readout(Rect next_draw)
