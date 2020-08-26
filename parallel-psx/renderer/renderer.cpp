@@ -702,7 +702,7 @@ void Renderer::mipmap_readout()
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
 }
 
-Rect &Renderer::compute_vram_framebuffer_rect()
+const Rect &Renderer::compute_vram_framebuffer_rect()
 {
 	if (render_state.valid_fb_rect)
 		return render_state.display_fb_rect;
@@ -741,8 +741,11 @@ Rect &Renderer::compute_vram_framebuffer_rect()
 		fb_height };
 }
 
-Renderer::DisplayRect Renderer::compute_display_rect()
+const Renderer::DisplayRect &Renderer::compute_display_rect()
 {
+	if (render_state.valid_output_rect)
+		return render_state.disp_output_rect;
+
 	unsigned clock_div;
 	switch (render_state.width_mode)
 	{
@@ -792,7 +795,8 @@ Renderer::DisplayRect Renderer::compute_display_rect()
 	display_height *= (render_state.is_480i ? 2 : 1);
 	upper_offset *= (render_state.is_480i ? 2 : 1);
 
-	return DisplayRect(left_offset, upper_offset, display_width, display_height);
+	return render_state.valid_output_rect = true,
+		render_state.disp_output_rect = DisplayRect(left_offset, upper_offset, display_width, display_height);
 }
 
 ImageHandle Renderer::scanout_vram_to_texture(bool scaled)
@@ -1039,7 +1043,7 @@ ImageHandle Renderer::scanout_to_texture()
 
 	unsigned render_scale = scaled ? scaling : 1;
 
-	auto display_rect = compute_display_rect();
+	auto &display_rect = compute_display_rect();
 
 	auto info = ImageCreateInfo::render_target(
 			display_rect.width * render_scale,
@@ -1381,7 +1385,8 @@ void Renderer::scanout_to_readout(Rect next_draw)
 {
 	//HACK bunch of test to detect games running in single buffered mode and
 	//do an early scanout to avoid flickering.
-	if (render_state.current_readout > 0)
+	auto &disp_rect = compute_display_rect();
+	if (render_state.current_readout >= disp_rect.y)
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
 		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&

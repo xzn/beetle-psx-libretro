@@ -100,6 +100,8 @@ public:
 		//Rect display_mode;
 		Rect display_fb_rect;
 		bool valid_fb_rect = false;
+		DisplayRect disp_output_rect;
+		bool valid_output_rect = false;
 		Rect last_fb_rect;
 		TextureWindow texture_window;
 		Rect cached_window_rect;
@@ -225,6 +227,7 @@ public:
 	void set_horizontal_display_range(int x1, int x2)
 	{
 		render_state.valid_fb_rect = false;
+		render_state.valid_output_rect = false;
 
 		render_state.horiz_start = x1;
 		render_state.horiz_end = x2;
@@ -233,6 +236,7 @@ public:
 	void set_vertical_display_range(int y1, int y2)
 	{
 		render_state.valid_fb_rect = false;
+		render_state.valid_output_rect = false;
 
 		render_state.vert_start = y1;
 		render_state.vert_end = y2;
@@ -244,6 +248,7 @@ public:
 		//	last_scanout.reset();
 		last_scanout.reset();
 		render_state.valid_fb_rect = false;
+		render_state.valid_output_rect = false;
 
 		//render_state.display_mode = rect;
 		render_state.scanout_mode = mode;
@@ -261,16 +266,19 @@ public:
 	void set_horizontal_overscan_cropping(bool crop_overscan)
 	{
 		render_state.crop_overscan = crop_overscan;
+		render_state.valid_output_rect = false;
 	}
 
 	void set_horizontal_offset_cycles(int offset_cycles)
 	{
 		render_state.offset_cycles = offset_cycles;
+		render_state.valid_output_rect = false;
 	}
 
 	void set_visible_scanlines(int slstart, int slend, int slstart_pal, int slend_pal)
 	{
 		// May need bounds checking to reject bad inputs. Currently assume all inputs are valid.
+		render_state.valid_output_rect = false;
 		render_state.slstart = slstart;
 		render_state.slend = slend;
 		render_state.slstart_pal = slstart_pal;
@@ -636,9 +644,9 @@ private:
 
 	Vulkan::ImageHandle last_scanout;
 	Vulkan::ImageHandle reuseable_scanout;
-	DisplayRect compute_display_rect();
+	const DisplayRect &compute_display_rect();
 
-	Rect &compute_vram_framebuffer_rect();
+	const Rect &compute_vram_framebuffer_rect();
 
 	void mipmap_framebuffer();
 	void mipmap_readout();
