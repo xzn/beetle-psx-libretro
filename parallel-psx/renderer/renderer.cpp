@@ -605,19 +605,53 @@ BufferHandle Renderer::scanout_to_buffer(bool draw_area, unsigned &width, unsign
 	return buffer;
 }
 
-void Renderer::mipmap_framebuffer()
+void Renderer::mipmap_framebuffer(bool readout)
 {
-	auto &rect = compute_vram_framebuffer_rect();
-	unsigned levels = scaled_views.size();
+	auto *views = &scaled_views;
+	auto fb = scaled_framebuffer;
+	auto bias = bias_framebuffer;
+	auto rect = compute_vram_framebuffer_rect();
+
+	if (readout)
+	{
+		views = &readout_views;
+		fb = readout_framebuffer;
+
+		auto info = ImageCreateInfo::render_target(
+			readout_framebuffer->get_width() / scaling,
+			readout_framebuffer->get_height() / scaling,
+			bias_framebuffer->get_format()
+		);
+		if (!readout_bias ||
+			readout_bias->get_width() != info.width ||
+			readout_bias->get_height() != info.height ||
+			readout_bias->get_format() != info.format)
+		{
+			info.initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+			info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+			readout_bias = device.create_image(info);
+		}
+		bias = readout_bias;
+		rect = {0, 0, bias->get_width(), bias->get_height()};
+
+		cmd->image_barrier(*fb, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+		fb->set_layout(Layout::General);
+		for (auto &v : *views)
+			v->get_image().set_layout(Layout::General);
+	}
+
+	unsigned levels = views->size();
 	for (unsigned i = 1; i <= levels; i++)
 	{
 		RenderPassInfo rp;
 		unsigned current_scale = max(scaling >> i, 1u);
 
 		if (i == levels)
-			rp.color_attachments[0] = &bias_framebuffer->get_view();
+			rp.color_attachments[0] = &bias->get_view();
 		else
-			rp.color_attachments[0] = scaled_views[i].get();
+			rp.color_attachments[0] = (*views)[i].get();
 
 		rp.num_color_attachments = 1;
 		rp.store_attachments = 1;
@@ -626,7 +660,7 @@ void Renderer::mipmap_framebuffer()
 
 		if (i == levels)
 		{
-			cmd->image_barrier(*bias_framebuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			cmd->image_barrier(*bias, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
 			                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 		}
@@ -640,7 +674,7 @@ void Renderer::mipmap_framebuffer()
 		else
 			cmd->set_program(*pipelines.mipmap_energy);
 
-		cmd->set_texture(0, 0, *scaled_views[i - 1], StockSampler::LinearClamp);
+		cmd->set_texture(0, 0, *(*views)[i - 1], StockSampler::LinearClamp);
 
 		cmd->set_quad_state();
 		cmd->set_vertex_binding(0, *quad, 0, 2);
@@ -659,6 +693,15 @@ void Renderer::mipmap_framebuffer()
 			{ (rect.x + 0.5f) / FB_WIDTH, (rect.y + 0.5f) / FB_HEIGHT },
 			{ (rect.x + rect.width - 0.5f) / FB_WIDTH, (rect.y + rect.height - 0.5f) / FB_HEIGHT },
 		};
+		if (readout)
+		{
+			push = {
+				{ 0, 0 }, { 1, 1 },
+				{ 1.0f / (rect.width * current_scale), 1.0f / (rect.height * current_scale) },
+				{ (0.5f) / rect.width, (0.5f) / rect.height },
+				{ (rect.width - 0.5f) / rect.width, (rect.height - 0.5f) / rect.height },
+			};
+		}
 		cmd->push_constants(&push, 0, sizeof(push));
 		cmd->set_vertex_attrib(0, 0, VK_FORMAT_R8G8_SNORM, 0);
 		cmd->set_primitive_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP);
@@ -670,18 +713,28 @@ void Renderer::mipmap_framebuffer()
 
 		if (i == levels)
 		{
-			cmd->image_barrier(*bias_framebuffer, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			cmd->image_barrier(*bias, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			                   VK_ACCESS_SHADER_READ_BIT);
 		}
 		else
 		{
-			cmd->image_barrier(*scaled_framebuffer, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+			cmd->image_barrier(*fb, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
 			                   VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			                   VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			                   VK_ACCESS_SHADER_READ_BIT);
 		}
+	}
+
+	if (readout)
+	{
+		cmd->image_barrier(*fb, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+		fb->set_layout(Layout::Optimal);
+		for (auto &v : *views)
+			v->get_image().set_layout(Layout::Optimal);
 	}
 }
 
@@ -998,6 +1051,7 @@ ImageHandle Renderer::scanout_to_texture()
 		UNSCALED,
 		READOUT,
 		READOUT_SSAA,
+		READOUT_ADAPTIVE_SMOOTHING,
 	} output_type = UNSCALED;
 
 	if (bpp24)
@@ -1011,8 +1065,10 @@ ImageHandle Renderer::scanout_to_texture()
 	{
 		if (RenderState::READOUT_SSAA == render_state.readout_type)
 			output_type = READOUT_SSAA;
+		else if (adaptive_smoothing)
+			output_type = READOUT_ADAPTIVE_SMOOTHING;
 		else
-		output_type = READOUT;
+			output_type = READOUT;
 	}
 	else if (ssaa)
 	{
@@ -1024,7 +1080,10 @@ ImageHandle Renderer::scanout_to_texture()
 	}
 
 	if (ADAPTIVE_SMOOTHING == output_type)
-		mipmap_framebuffer();
+		mipmap_framebuffer(false);
+
+	if (READOUT_ADAPTIVE_SMOOTHING == output_type)
+		mipmap_framebuffer(true);
 	
 	// if (READOUT_SSAA == output_type)
 	// 	mipmap_readout();
@@ -1071,12 +1130,15 @@ ImageHandle Renderer::scanout_to_texture()
 	};
 
 	Push fb_push = { { float(rect.x) / FB_WIDTH, float(rect.y) / FB_HEIGHT },
-		          { float(rect.width) / FB_WIDTH, float(rect.height) / FB_HEIGHT },
-				  { (rect.x + 0.5f) / FB_WIDTH, (rect.y + 0.5f) / FB_HEIGHT },
-		          { (rect.x + rect.width - 0.5f) / FB_WIDTH, (rect.y + rect.height - 0.5f) / FB_HEIGHT },
-		          float(scaled_views.size() - 1) };
+		{ float(rect.width) / FB_WIDTH, float(rect.height) / FB_HEIGHT },
+		{ (rect.x + 0.5f) / FB_WIDTH, (rect.y + 0.5f) / FB_HEIGHT },
+		{ (rect.x + rect.width - 0.5f) / FB_WIDTH, (rect.y + rect.height - 0.5f) / FB_HEIGHT },
+		float(scaled_views.size() - 1) };
 
-	Push readout_push = { { 0, 0 }, { 1, 1 } };
+	Push readout_push = { { 0, 0 }, { 1, 1 },
+		{ 0.5f / rect.width, 0.5f / rect.height },
+		{ (rect.width - 0.5f) / rect.width, (rect.height - 0.5f) / rect.height },
+		float(readout_views.size() ? readout_views.size() - 1 : 0) };
 
 	struct OutputParam {
 		OutputType type;
@@ -1141,6 +1203,14 @@ ImageHandle Renderer::scanout_to_texture()
 			readout_views.size() ? readout_views.back().get() : nullptr,
 			StockSampler::NearestClamp,
 			&readout_push
+		},
+		{
+			READOUT_ADAPTIVE_SMOOTHING,
+			pipelines.mipmap_resolve,
+			pipelines.mipmap_dither_resolve,
+			readout_framebuffer ? &readout_framebuffer->get_view() : nullptr,
+			StockSampler::TrilinearClamp,
+			&readout_push
 		}
 	};
 
@@ -1191,6 +1261,9 @@ ImageHandle Renderer::scanout_to_texture()
 	if (ADAPTIVE_SMOOTHING == output_type)
 		cmd->set_texture(0, 1, bias_framebuffer->get_view(), StockSampler::LinearClamp);
 
+	if (READOUT_ADAPTIVE_SMOOTHING == output_type)
+		cmd->set_texture(0, 1, readout_bias->get_view(), StockSampler::LinearClamp);
+
 	if (dither)
 	{
 		cmd->set_texture(0, 2, dither_lut->get_view(), StockSampler::NearestWrap);
@@ -1234,8 +1307,10 @@ ImageHandle Renderer::scanout_to_texture()
 
 	cmd->end_render_pass();
 
-	if (READOUT == output_type || READOUT_SSAA == output_type)
-		cmd->image_barrier(output_param.src->get_image(),
+	if (READOUT == output_type ||
+		READOUT_SSAA == output_type ||
+		READOUT_ADAPTIVE_SMOOTHING == output_type)
+		cmd->image_barrier(*readout_framebuffer,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -1253,7 +1328,7 @@ ImageHandle Renderer::scanout_to_texture()
 void Renderer::scanout_to_readout(unsigned next_readout)
 {
 	bool bpp24 = render_state.scanout_mode == ScanoutMode::BGR24;
-	// TODO support bpp24
+	// TODO support bpp24 (need games that use this and single buffering for testing)
 	if (bpp24)
 		return;
 
@@ -1261,6 +1336,8 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		return;
 
 	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
+	// TODO this won't work if a game changes the display area in the middle of a scanout
+	// (does any game do this), the early scanout is then lost
 	auto &fb_rect = compute_vram_framebuffer_rect();
 
 	auto extent_y = next_readout - render_state.next_readout;
@@ -1322,7 +1399,8 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 		dst->get_format() != info.format)
 	{
 		info.initial_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		info.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		dst = device.create_image(info);
 
 		dst_views.clear();
@@ -1386,7 +1464,7 @@ void Renderer::scanout_to_readout(Rect next_draw)
 	//HACK bunch of test to detect games running in single buffered mode and
 	//do an early scanout to avoid flickering.
 	auto &disp_rect = compute_display_rect();
-	if (render_state.current_readout >= disp_rect.y)
+	if (render_state.current_readout >= disp_rect.y) // Is this test correct? need testing
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
 		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
