@@ -1310,7 +1310,7 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                   dest = GPU.surface->pixels + ((dest_line << GPU.upscale_shift) * GPU.surface->pitch32);
                }
 
-               rsx_intf_set_current_readout(GPU.DisplayFB_CurYOffset);
+               rsx_intf_set_current_readout(GPU.InVBlank ? -1 : GPU.DisplayFB_CurYOffset);
 
                //if(GPU.scanline == 64)
                // printf("%u\n", sys_timestamp - ((uint64)gpu_clocks * 65536) / GPU.GPUClockRatio);

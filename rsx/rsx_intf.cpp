@@ -552,7 +552,7 @@ void rsx_intf_set_display_mode(bool depth_24bpp,
    }
 }
 
-void rsx_intf_set_current_readout(uint16_t yoffset)
+void rsx_intf_set_current_readout(int16_t yoffset)
 {
    switch (rsx_type)
    {

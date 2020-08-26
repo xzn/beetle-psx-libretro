@@ -134,7 +134,7 @@ public:
 
 		unsigned display_fb_xstart = 0;
 		unsigned display_fb_ystart = 0;
-		unsigned current_readout = 0;
+		int current_readout = 0;
 		unsigned next_readout = 0;
 		bool last_output_readout = false;
 		enum ReadoutType
@@ -258,7 +258,7 @@ public:
 		render_state.width_mode = width_mode;
 	}
 
-	void set_current_readout(unsigned yoffset)
+	void set_current_readout(int yoffset)
 	{
 		render_state.current_readout = yoffset;
 	}

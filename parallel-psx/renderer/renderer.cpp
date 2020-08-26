@@ -964,14 +964,21 @@ ImageHandle Renderer::scanout_vram_to_texture(bool scaled)
 ImageHandle Renderer::scanout_to_texture()
 {
 	auto &rect = compute_vram_framebuffer_rect();
-	render_state.last_fb_rect = rect;
 
 	bool readout = render_state.next_readout;
 	if (readout)
 	{
 		scanout_to_readout(rect.height);
 		render_state.next_readout = 0;
+
+		if (render_state.last_fb_rect != rect)
+		{
+			readout = false;
+			render_state.last_fb_rect = rect;
+		}
 	}
+	else
+		render_state.last_fb_rect = rect;
 
 	atlas.flush_render_pass();
 	if (texture_tracking_enabled) {
@@ -1463,8 +1470,7 @@ void Renderer::scanout_to_readout(Rect next_draw)
 {
 	//HACK bunch of test to detect games running in single buffered mode and
 	//do an early scanout to avoid flickering.
-	auto &disp_rect = compute_display_rect();
-	if (render_state.current_readout >= disp_rect.y) // Is this test correct? need testing
+	if (render_state.current_readout >= 0) // Is this test correct? need testing
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
 		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&

@@ -660,7 +660,7 @@ void rsx_vulkan_set_display_mode(bool depth_24bpp,
    }
 }
 
-void rsx_vulkan_set_current_readout(uint16_t yoffset)
+void rsx_vulkan_set_current_readout(int16_t yoffset)
 {
    if (!renderer)
       return;
