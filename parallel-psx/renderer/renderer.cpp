@@ -1470,10 +1470,11 @@ void Renderer::scanout_to_readout(Rect next_draw)
 {
 	//HACK bunch of test to detect games running in single buffered mode and
 	//do an early scanout to avoid flickering.
-	if (render_state.current_readout >= 0) // Is this test correct? need testing
+	//need more testing to make sure it actually works and doesn't break anything
+	if (!render_state.is_480i && render_state.current_readout >= 0)
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
-		if (!render_state.is_480i && render_state.next_readout < fb_rect.height &&
+		if (render_state.next_readout < fb_rect.height &&
 			render_state.last_fb_rect == fb_rect && next_draw.intersects(fb_rect))
 			scanout_to_readout(fb_rect.height);
 	}
