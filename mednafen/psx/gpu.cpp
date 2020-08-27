@@ -1067,7 +1067,8 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                if(GPU.sl_zero_reached)
                {
                   //printf("Req Exit(visible fallthrough case): %u\n", GPU.scanline);
-                  PSX_RequestMLExit();
+                  if ((GPU.DisplayMode & 0x24) == 0x24 || rsx_intf_is_type() != RSX_VULKAN)
+                     PSX_RequestMLExit();
                }
             }
 
@@ -1076,7 +1077,8 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                if(GPU.sl_zero_reached)
                {
                   //printf("Req Exit(final fallthrough case): %u\n", GPU.scanline);
-                  PSX_RequestMLExit();
+                  if ((GPU.DisplayMode & 0x24) == 0x24 || rsx_intf_is_type() != RSX_VULKAN)
+                     PSX_RequestMLExit();
                }
 
                if(GPU.DisplayMode & DISP_INTERLACED)
@@ -1172,7 +1174,8 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                   if(GPU.scanline >= (GPU.HardwarePALType ? 260 : 232))
                   {
                      //printf("Req Exit(vblank case): %u\n", GPU.scanline);
-                     PSX_RequestMLExit();
+                     if ((GPU.DisplayMode & 0x24) == 0x24 || rsx_intf_is_type() != RSX_VULKAN)
+                        PSX_RequestMLExit();
                   }
 #if 0
                   else
@@ -1196,6 +1199,9 @@ int32_t GPU_Update(const int32_t sys_timestamp)
             if(GPU.scanline == GPU.VertStart && GPU.InVBlank)
             {
                GPU.InVBlank = false;
+
+               if ((GPU.DisplayMode & 0x24) != 0x24 && rsx_intf_is_type() == RSX_VULKAN)
+                  PSX_RequestMLExit();
 
                // Note to self: X-Men Mutant Academy
                // relies on this being set on the proper
@@ -1309,8 +1315,6 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                   //reset dest back to i=0 for PSX_GPULineHook call
                   dest = GPU.surface->pixels + ((dest_line << GPU.upscale_shift) * GPU.surface->pitch32);
                }
-
-               rsx_intf_set_current_readout(GPU.InVBlank ? -1 : GPU.DisplayFB_CurYOffset);
 
                //if(GPU.scanline == 64)
                // printf("%u\n", sys_timestamp - ((uint64)gpu_clocks * 65536) / GPU.GPUClockRatio);

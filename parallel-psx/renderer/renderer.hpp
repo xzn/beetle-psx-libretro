@@ -134,7 +134,7 @@ public:
 
 		unsigned display_fb_xstart = 0;
 		unsigned display_fb_ystart = 0;
-		int current_readout = 0;
+		int current_readout = -1;
 		unsigned next_readout = 0;
 		bool last_output_readout = false;
 		enum ReadoutType
