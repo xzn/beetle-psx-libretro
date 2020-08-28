@@ -620,7 +620,7 @@ BufferHandle Renderer::scanout_to_buffer(bool draw_area, unsigned &width, unsign
 	return buffer;
 }
 
-void Renderer::mipmap_framebuffer(bool readout)
+void Renderer::smooth_filter_framebuffer(bool readout)
 {
 	auto *views = &scaled_views;
 	auto fb = scaled_framebuffer;
@@ -753,14 +753,26 @@ void Renderer::mipmap_framebuffer(bool readout)
 	}
 }
 
-void Renderer::mipmap_readout()
+void Renderer::downscale_framebuffer()
+{
+	cmd->barrier_prepare_generate_mipmap(*scaled_framebuffer,
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+	scaled_framebuffer->set_layout(Layout::Optimal);
+	cmd->generate_mipmap(*scaled_framebuffer);
+	cmd->image_barrier(*scaled_framebuffer,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+	scaled_framebuffer->set_layout(Layout::General);
+}
+
+void Renderer::downscale_readout()
 {
 	unsigned levels = readout_views.size();
 	if (!levels)
 		return;
 
-	// TODO FIXME How are you actually supposed to use this?
-	// I'm getting tons of validation errors.
 	cmd->barrier_prepare_generate_mipmap(*readout_framebuffer,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
 	cmd->generate_mipmap(*readout_framebuffer);
@@ -1104,14 +1116,17 @@ ImageHandle Renderer::scanout_to_texture()
 		output_type = ADAPTIVE_SMOOTHING;
 	}
 
+	if (SSAA == output_type)
+		downscale_framebuffer();
+
+	if (READOUT_SSAA == output_type)
+		downscale_readout();
+
 	if (ADAPTIVE_SMOOTHING == output_type)
-		mipmap_framebuffer(false);
+		smooth_filter_framebuffer(false);
 
 	if (READOUT_ADAPTIVE_SMOOTHING == output_type)
-		mipmap_framebuffer(true);
-	
-	// if (READOUT_SSAA == output_type)
-	// 	mipmap_readout();
+		smooth_filter_framebuffer(true);
 
 	if (scanout_semaphore)
 	{
@@ -1191,9 +1206,9 @@ ImageHandle Renderer::scanout_to_texture()
 		},
 		{
 			SSAA,
-			pipelines.unscaled_quad_blitter,
-			pipelines.unscaled_dither_quad_blitter,
-			&framebuffer->get_view(),
+			pipelines.scaled_quad_blitter,
+			pipelines.scaled_dither_quad_blitter,
+			scaled_views.back().get(),
 			StockSampler::NearestClamp,
 			&fb_push
 		},
@@ -1223,8 +1238,8 @@ ImageHandle Renderer::scanout_to_texture()
 		},
 		{
 			READOUT_SSAA,
-			pipelines.unscaled_quad_blitter,
-			pipelines.unscaled_dither_quad_blitter,
+			pipelines.scaled_quad_blitter,
+			pipelines.scaled_dither_quad_blitter,
 			readout_views.size() ? readout_views.back().get() : nullptr,
 			StockSampler::NearestClamp,
 			&readout_push
@@ -1251,7 +1266,7 @@ ImageHandle Renderer::scanout_to_texture()
 	//rp.clear_color[0] = {60.0f/256.0f, 230.0f/256.0f, 60.0f/256.0f, 0};
 	rp.clear_attachments = 1;
 
-	if (READOUT == output_type || READOUT_SSAA == output_type)
+	if (READOUT == output_type)
 		cmd->image_barrier(output_param.src->get_image(),
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1373,8 +1388,9 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 
 	using OutputType = RenderState::ReadoutType;
 	OutputType output_type = RenderState::READOUT;
-	if (ssaa)
-		output_type = RenderState::READOUT_SSAA;
+	// TODO clean this up later, no longer needed
+	// if (ssaa)
+	// 	output_type = RenderState::READOUT_SSAA;
 
 	struct OutputParam
 	{
@@ -1396,7 +1412,7 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 			(unsigned)trailing_zeroes(scaling),
 		},
 		{
-			RenderState::READOUT,
+			RenderState::READOUT_SSAA,
 			framebuffer,
 			framebuffer->get_format(),
 			fb_rect.width,

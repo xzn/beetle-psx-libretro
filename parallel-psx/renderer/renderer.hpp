@@ -667,8 +667,9 @@ private:
 
 	const Rect &compute_vram_framebuffer_rect();
 
-	void mipmap_framebuffer(bool readout);
-	void mipmap_readout();
+	void smooth_filter_framebuffer(bool readout);
+	void downscale_framebuffer();
+	void downscale_readout();
 	void scanout_to_readout(unsigned next_readout);
 	void scanout_to_readout(Rect next_draw);
 	Vulkan::BufferHandle quad;
