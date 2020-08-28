@@ -1477,14 +1477,22 @@ void Renderer::scanout_to_readout(Rect next_draw)
 	if (!render_state.is_480i && render_state.next_readout <= render_state.current_readout)
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
-		if (render_state.next_readout < fb_rect.height && render_state.last_fb_rect == fb_rect)
+		if (render_state.next_readout < fb_rect.height)
 		{
-			Rect readout_rect = {
+			if (render_state.last_fb_rect == fb_rect)
+			{
+				Rect readout_rect = {
 				fb_rect.x, fb_rect.y + render_state.next_readout,
 				fb_rect.width, render_state.current_readout - render_state.next_readout + 1
-			};
-			if (next_draw.intersects(readout_rect))
-				scanout_to_readout(render_state.current_readout + 1);
+				};
+				if (next_draw.intersects(readout_rect))
+					scanout_to_readout(render_state.current_readout + 1);
+			}
+			else
+			{
+				render_state.last_fb_rect = fb_rect;
+				render_state.next_readout = 0;
+			}
 		}
 	}
 }
