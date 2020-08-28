@@ -380,6 +380,7 @@ void Renderer::init_pipelines()
 	switch (scaling)
 	{
 		// TODO this fixes Vagrant Story to be on par with the GL backend, still not as good as Duckstation
+		// Pretty sure this breaks SSAA as well.
 #if 0
 	case 16:
 		pipelines.resolve_to_unscaled = device.request_program(resolve_to_unscaled_16, sizeof(resolve_to_unscaled_16));
@@ -1864,6 +1865,7 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 			render_state.UVLimits.min_v,
 			render_state.UVLimits.max_u,
 			render_state.UVLimits.max_v,
+			int16_t(scaling)
 		};
 
 		if (render_state.texture_mode != TextureMode::None && !render_state.texture_color_modulate)
@@ -2170,11 +2172,14 @@ void Renderer::clear_quad(const Rect &rect, FBColor color, bool candidate)
 	float z = allocate_depth(rect);
 	atlas.set_texture_mode(old);
 
-	BufferVertex pos0 = { float(rect.x), float(rect.y), z, 1.0f, fbcolor_to_rgba8(color) };
-	BufferVertex pos1 = { float(rect.x) + float(rect.width), float(rect.y), z, 1.0f, fbcolor_to_rgba8(color) };
-	BufferVertex pos2 = { float(rect.x), float(rect.y) + float(rect.height), z, 1.0f, fbcolor_to_rgba8(color) };
+	BufferVertex pos0 = { float(rect.x), float(rect.y), z, 1.0f,
+		fbcolor_to_rgba8(color), .scale = (int16_t)scaling };
+	BufferVertex pos1 = { float(rect.x) + float(rect.width), float(rect.y), z, 1.0f,
+		fbcolor_to_rgba8(color), .scale = (int16_t)scaling };
+	BufferVertex pos2 = { float(rect.x), float(rect.y) + float(rect.height), z, 1.0f,
+		fbcolor_to_rgba8(color), .scale = (int16_t)scaling };
 	BufferVertex pos3 = { float(rect.x) + float(rect.width), float(rect.y) + float(rect.height), z, 1.0f,
-		                  fbcolor_to_rgba8(color) };
+		fbcolor_to_rgba8(color), .scale = (int16_t)scaling };
 	queue.opaque.push_back(pos0);
 	queue.opaque.push_back(pos1);
 	queue.opaque.push_back(pos2);
@@ -2408,7 +2413,8 @@ void Renderer::render_semi_transparent_primitives()
 	cmd->set_vertex_attrib(3, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, pal_x));
 	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, u));
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
-	cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestClamp);
+	cmd->set_vertex_attrib(6, 0, VK_FORMAT_R16_UINT, offsetof(BufferVertex, scale));
+	cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestClamp);
 
 	auto size = vertices->size() * sizeof(BufferVertex);
 	void *verts = cmd->allocate_vertex_data(0, size, sizeof(BufferVertex));
@@ -2430,7 +2436,7 @@ void Renderer::render_semi_transparent_primitives()
 			semi_transparent = pipelines.poly_w1_semi_trans;
 		}
 
-		cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestWrap);
+		cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestWrap);
 		hd_texture_uniforms(state.hd_texture_index);
 		
 		if (state.scissor_index < 0)
@@ -2631,7 +2637,8 @@ void Renderer::render_semi_transparent_opaque_texture_primitives(PrimitiveType p
 	cmd->set_vertex_attrib(3, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, pal_x));
 	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, u));
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
-	cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestClamp);
+	cmd->set_vertex_attrib(6, 0, VK_FORMAT_R16_UINT, offsetof(BufferVertex, scale));
+	cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestClamp);
 
 	dispatch(*vertices, *scissors);
 }
@@ -2669,7 +2676,8 @@ void Renderer::render_opaque_texture_primitives(PrimitiveType primitive_type)
 	cmd->set_vertex_attrib(3, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, pal_x)); // Pad to support AMD
 	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, u));
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
-	cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestClamp);
+	cmd->set_vertex_attrib(6, 0, VK_FORMAT_R16_UINT, offsetof(BufferVertex, scale));
+	cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestClamp);
 
 	dispatch(*vertices, *scissors);
 }

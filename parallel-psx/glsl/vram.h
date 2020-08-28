@@ -6,7 +6,8 @@ layout(location = 2) flat in mediump ivec3 vParam;
 layout(location = 3) flat in mediump ivec2 vBaseUV;
 layout(location = 4) flat in mediump ivec4 vWindow;
 layout(location = 5) flat in mediump ivec4 vTexLimits;
-layout(set = 0, binding = 0) uniform mediump usampler2D uFramebuffer;
+layout(location = 6) flat in mediump int vScale;
+layout(set = 0, binding = 0) uniform mediump sampler2D uFramebuffer;
 
 vec2 clamp_coord(vec2 coord)
 {
@@ -19,27 +20,27 @@ vec4 sample_vram_atlas(vec2 uvv)
     ivec3 params = vParam;
     int shift = params.z & 3;
 
-    ivec2 uv = (ivec2(uvv) & vWindow.xy) | vWindow.zw;
-
-    ivec2 coord;
+    vec2 coord;
     if (shift != 0)
     {
         int bpp = 16 >> shift;
-        coord = ivec2(uv);
-        int phase = coord.x & ((1 << shift) - 1);
+        ivec2 off = (ivec2(uvv) & vWindow.xy) | vWindow.zw;
+        int phase = off.x & ((1 << shift) - 1);
         int align = bpp * phase;
-        coord.x >>= shift;
-        int value = int(texelFetch(uFramebuffer, (vBaseUV + coord) & ivec2(1023, 511), 0).x);
+        off.x >>= shift;
+        // off = ivec2(mod((vBaseUV + off), vec2(1024, 512)));
+        off += vBaseUV;
+        int value = int(pack_abgr1555(texelFetch(uFramebuffer, off * vScale, 0)));
         int mask = (1 << bpp) - 1;
         value = (value >> align) & mask;
-
         params.x += value;
         coord = params.xy;
     }
     else
-        coord = vBaseUV + uv;
+        // coord = mod((vBaseUV + uvv), vec2(1024, 512));
+        coord = vBaseUV + uvv;
 
-    return abgr1555(texelFetch(uFramebuffer, coord & ivec2(1023, 511), 0).x);
+    return texelFetch(uFramebuffer, ivec2(round(coord * vScale)), 0);
 }
 
 // Take a normalized color and convert it into a 16bit 1555 ABGR

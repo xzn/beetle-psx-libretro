@@ -79,7 +79,7 @@ void FBAtlas::read_texture()
 	shifted.y += renderpass.texture_offset_y;
 
 	//auto domain = palette ? Domain::Unscaled : find_suitable_domain(shifted);
-	auto domain = Domain::Unscaled;
+	auto domain = Domain::Scaled;
 	sync_domain(domain, shifted);
 
 	Rect palette_rect = { renderpass.palette_offset_x, renderpass.palette_offset_y,
