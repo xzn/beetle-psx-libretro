@@ -136,6 +136,7 @@ public:
 		unsigned display_fb_ystart = 0;
 		int current_readout = -1;
 		unsigned next_readout = 0;
+		bool current_output_readout = true;
 		bool last_output_readout = false;
 		enum ReadoutType
 		{
@@ -260,7 +261,12 @@ public:
 
 	void set_current_readout(int yoffset)
 	{
+	#if 0
 		render_state.current_readout = yoffset;
+	#else
+		render_state.current_readout = yoffset >= 0 ?
+			compute_vram_framebuffer_rect().height - 1 : -1;
+	#endif
 	}
 
 	void set_horizontal_overscan_cropping(bool crop_overscan)

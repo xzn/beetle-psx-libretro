@@ -1067,8 +1067,7 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                if(GPU.sl_zero_reached)
                {
                   //printf("Req Exit(visible fallthrough case): %u\n", GPU.scanline);
-                  if ((GPU.DisplayMode & 0x24) == 0x24 || rsx_intf_is_type() == RSX_SOFTWARE)
-                     PSX_RequestMLExit();
+                  PSX_RequestMLExit();
                }
             }
 
@@ -1077,8 +1076,7 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                if(GPU.sl_zero_reached)
                {
                   //printf("Req Exit(final fallthrough case): %u\n", GPU.scanline);
-                  if ((GPU.DisplayMode & 0x24) == 0x24 || rsx_intf_is_type() == RSX_SOFTWARE)
-                     PSX_RequestMLExit();
+                  PSX_RequestMLExit();
                }
 
                if(GPU.DisplayMode & DISP_INTERLACED)
@@ -1174,8 +1172,7 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                   if(GPU.scanline >= (GPU.HardwarePALType ? 260 : 232))
                   {
                      //printf("Req Exit(vblank case): %u\n", GPU.scanline);
-                     if ((GPU.DisplayMode & 0x24) == 0x24 || rsx_intf_is_type() == RSX_SOFTWARE)
-                        PSX_RequestMLExit();
+                     PSX_RequestMLExit();
                   }
 #if 0
                   else
@@ -1199,9 +1196,6 @@ int32_t GPU_Update(const int32_t sys_timestamp)
             if(GPU.scanline == GPU.VertStart && GPU.InVBlank)
             {
                GPU.InVBlank = false;
-
-               if ((GPU.DisplayMode & 0x24) != 0x24 && rsx_intf_is_type() != RSX_SOFTWARE)
-                  PSX_RequestMLExit();
 
                // Note to self: X-Men Mutant Academy
                // relies on this being set on the proper
@@ -1335,6 +1329,8 @@ int32_t GPU_Update(const int32_t sys_timestamp)
                                pix_clock_div,
                                GPU.surface->pitch32,
                                (1 << GPU.upscale_shift));
+
+               rsx_intf_set_current_readout(GPU.InVBlank ? -1 : GPU.DisplayFB_CurYOffset);
             }
             else
             {

@@ -965,29 +965,30 @@ ImageHandle Renderer::scanout_to_texture()
 {
 	auto &rect = compute_vram_framebuffer_rect();
 
-	bool readout = render_state.next_readout;
+	bool readout = render_state.current_output_readout;
 	if (readout)
 	{
-		scanout_to_readout(rect.height);
-		render_state.next_readout = 0;
-
-#if 0
 		if (render_state.last_fb_rect != rect)
 		{
 			readout = false;
 			render_state.last_fb_rect = rect;
 		}
-#endif
+		else
+			scanout_to_readout(rect.height);
+		render_state.next_readout = 0;
 	}
 	else
+	{
 		render_state.last_fb_rect = rect;
+		render_state.current_output_readout = true;
+	}
 
 	atlas.flush_render_pass();
 	if (texture_tracking_enabled) {
 		tracker.endFrame();
 	}
 
-	if (readout == render_state.last_output_readout && last_scanout)
+	if (render_state.last_output_readout == readout && !readout && last_scanout)
 		return last_scanout;
 	render_state.last_output_readout = readout;
 
@@ -1474,12 +1475,14 @@ void Renderer::scanout_to_readout(Rect next_draw)
 	//HACK bunch of test to detect games running in single buffered mode and
 	//do an early scanout to avoid flickering.
 	//need more testing to make sure it actually works and doesn't break anything
-	if (!render_state.is_480i && render_state.next_readout <= render_state.current_readout)
+	if (!render_state.is_480i &&
+		render_state.current_output_readout)
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
-		if (render_state.next_readout < fb_rect.height)
+		if (render_state.last_fb_rect == fb_rect)
 		{
-			if (render_state.last_fb_rect == fb_rect)
+			if (render_state.next_readout < fb_rect.height &&
+				render_state.next_readout <= render_state.current_readout)
 			{
 				Rect readout_rect = {
 				fb_rect.x, fb_rect.y + render_state.next_readout,
@@ -1488,11 +1491,12 @@ void Renderer::scanout_to_readout(Rect next_draw)
 				if (next_draw.intersects(readout_rect))
 					scanout_to_readout(render_state.current_readout + 1);
 			}
-			else
-			{
-				render_state.last_fb_rect = fb_rect;
-				render_state.next_readout = 0;
-			}
+		}
+		else
+		{
+			render_state.last_fb_rect = fb_rect;
+			render_state.next_readout = 0;
+			render_state.current_output_readout = false;
 		}
 	}
 }
