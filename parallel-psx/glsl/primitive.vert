@@ -25,7 +25,11 @@ void main()
    vColor = Color;
 #ifdef TEXTURED
    // iCB: Offset UVs by half a pixel to account for rounding errors in projection
-   vUV = vec2(UV.xy) + vec2(0.5 / 1024.0, 0.5 / 512.0);
+   // vUV = vec2(UV.xy) + vec2(0.5 / 1024.0, 0.5 / 512.0);
+
+   // UV is a vector of integers so actually offset by half a pixel would be
+   // + vec2(0.5, 0.5), but it makes the textures wrong
+   vUV = vec2(UV.xy);
    vParam = Param;
    vBaseUV = UV.zw;
    vWindow = ivec4(Window);

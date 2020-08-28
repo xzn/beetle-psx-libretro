@@ -971,11 +971,13 @@ ImageHandle Renderer::scanout_to_texture()
 		scanout_to_readout(rect.height);
 		render_state.next_readout = 0;
 
+#if 0
 		if (render_state.last_fb_rect != rect)
 		{
 			readout = false;
 			render_state.last_fb_rect = rect;
 		}
+#endif
 	}
 	else
 		render_state.last_fb_rect = rect;
@@ -1345,7 +1347,8 @@ void Renderer::scanout_to_readout(unsigned next_readout)
 	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
 	// TODO this won't work if a game changes the display area in the middle of a scanout
 	// (does any game do this), the early scanout is then lost
-	auto &fb_rect = compute_vram_framebuffer_rect();
+	// auto &fb_rect = compute_vram_framebuffer_rect();
+	auto &fb_rect = render_state.last_fb_rect;
 
 	auto extent_y = next_readout - render_state.next_readout;
 	Rect src_rect = {
@@ -1471,12 +1474,18 @@ void Renderer::scanout_to_readout(Rect next_draw)
 	//HACK bunch of test to detect games running in single buffered mode and
 	//do an early scanout to avoid flickering.
 	//need more testing to make sure it actually works and doesn't break anything
-	if (!render_state.is_480i && render_state.current_readout >= 0)
+	if (!render_state.is_480i && render_state.next_readout <= render_state.current_readout)
 	{
 		auto &fb_rect = compute_vram_framebuffer_rect();
-		if (render_state.next_readout < fb_rect.height &&
-			render_state.last_fb_rect == fb_rect && next_draw.intersects(fb_rect))
-			scanout_to_readout(fb_rect.height);
+		if (render_state.next_readout < fb_rect.height && render_state.last_fb_rect == fb_rect)
+		{
+			Rect readout_rect = {
+				fb_rect.x, fb_rect.y + render_state.next_readout,
+				fb_rect.width, render_state.current_readout - render_state.next_readout + 1
+			};
+			if (next_draw.intersects(readout_rect))
+				scanout_to_readout(render_state.current_readout + 1);
+		}
 	}
 }
 
