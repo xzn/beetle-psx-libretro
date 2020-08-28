@@ -379,6 +379,8 @@ void Renderer::init_pipelines()
 {
 	switch (scaling)
 	{
+		// TODO this fixes Vagrant Story to be on par with the GL backend, still not as good as Duckstation
+#if 0
 	case 16:
 		pipelines.resolve_to_unscaled = device.request_program(resolve_to_unscaled_16, sizeof(resolve_to_unscaled_16));
 		break;
@@ -390,6 +392,7 @@ void Renderer::init_pipelines()
 	case 4:
 		pipelines.resolve_to_unscaled = device.request_program(resolve_to_unscaled_4, sizeof(resolve_to_unscaled_4));
 		break;
+#endif
 
 	default:
 		pipelines.resolve_to_unscaled = device.request_program(resolve_to_unscaled_2, sizeof(resolve_to_unscaled_2));
@@ -1641,7 +1644,7 @@ void Renderer::flush_resolves()
 		ensure_command_buffer();
 		cmd->set_program(*pipelines.resolve_to_unscaled);
 		cmd->set_storage_texture(0, 0, framebuffer->get_view());
-		cmd->set_texture(0, 1, *scaled_views[0], StockSampler::LinearClamp);
+		cmd->set_texture(0, 1, *scaled_views[0], StockSampler::NearestClamp); // StockSampler::LinearClamp
 
 		unsigned size = queue.unscaled_resolves.size();
 		for (unsigned i = 0; i < size; i += 1024)
