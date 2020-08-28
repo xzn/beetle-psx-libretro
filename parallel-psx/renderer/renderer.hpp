@@ -93,6 +93,7 @@ public:
 		Polygon,
 		Polygon_w1,
 		Sprite,
+		Line
 	};
 
 	struct RenderState
@@ -489,7 +490,6 @@ private:
 
 		Vulkan::Program *opaque_flat;
 		Vulkan::Program *opaque_textured;
-		Vulkan::Program *opaque_spr_textured;
 		Vulkan::Program *opaque_semi_transparent;
 		Vulkan::Program *semi_transparent;
 		Vulkan::Program *semi_transparent_masked_add;
@@ -500,6 +500,12 @@ private:
 		Vulkan::Program *flat_masked_average;
 		Vulkan::Program *flat_masked_sub;
 		Vulkan::Program *flat_masked_add_quarter;
+		Vulkan::Program *opaque_spr_textured;
+		Vulkan::Program *opaque_spr_semi_trans;
+		Vulkan::Program *spr_semi_trans;
+		Vulkan::Program *opaque_poly_w1_textured;
+		Vulkan::Program *opaque_poly_w1_semi_trans;
+		Vulkan::Program *poly_w1_semi_trans;
 
 		Vulkan::Program *mipmap_resolve;
 		Vulkan::Program *mipmap_dither_resolve;
@@ -543,7 +549,7 @@ private:
 		SemiTransparentMode semi_transparent;
 		bool textured;
 		bool masked;
-		bool w1; // w of vertice = 1
+		PrimitiveType primitive_type;
 
 		bool operator==(const SemiTransparentState &other) const
 		{
@@ -593,8 +599,6 @@ private:
 		// Textured primitives, no semi-transparency.
 		std::vector<BufferVertex> opaque_textured;
 		std::vector<PrimitiveInfo> opaque_textured_scissor;
-		std::vector<BufferVertex> opaque_spr_textured; // Sprite primitives
-		std::vector<PrimitiveInfo> opaque_spr_textured_scissor;
 
 		// Textured primitives, semi-transparency enabled.
 		std::vector<BufferVertex> semi_transparent_opaque;
@@ -602,6 +606,12 @@ private:
 
 		std::vector<BufferVertex> semi_transparent;
 		std::vector<SemiTransparentState> semi_transparent_state;
+
+		// Sprites textured primitives
+		std::vector<BufferVertex> opaque_spr_textured;
+		std::vector<PrimitiveInfo> opaque_spr_textured_scissor;
+		std::vector<BufferVertex> semi_trans_opaque_spr;
+		std::vector<PrimitiveInfo> semi_trans_opaque_spr_scissor;
 
 		// Polygon primitives, w = 1
 		std::vector<BufferVertex> opaque_poly_w1;
@@ -638,7 +648,8 @@ private:
 
 	float allocate_depth(const Rect &rect);
 
-	void build_attribs(BufferVertex *verts, const Vertex *vertices, unsigned count, HdTextureHandle &hd_texture_index);
+	void build_attribs(BufferVertex *verts, const Vertex *vertices, unsigned count,
+		HdTextureHandle &hd_texture_index, bool &poly_w1);
 	void build_line_quad(Vertex *quad, const Vertex *line);
 	std::vector<BufferVertex> *select_pipeline(unsigned prims, int scissor, HdTextureHandle hd_texture);
 

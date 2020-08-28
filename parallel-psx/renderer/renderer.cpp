@@ -309,9 +309,20 @@ void Renderer::init_primitive_pipelines()
 		break;
 	}
 
-	// Use the default pipeline for sprites which for correct result should not be filtered.
+	// Use the default pipeline for sprites and polygons with w = 1
 	pipelines.opaque_spr_textured = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
 			opaque_textured_frag, sizeof(opaque_textured_frag));
+	pipelines.opaque_spr_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
+			opaque_semitrans_frag, sizeof(opaque_semitrans_frag));
+	pipelines.spr_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
+			semitrans_frag, sizeof(semitrans_frag));
+
+	pipelines.opaque_poly_w1_textured = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
+			opaque_textured_frag, sizeof(opaque_textured_frag));
+	pipelines.opaque_poly_w1_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
+			opaque_semitrans_frag, sizeof(opaque_semitrans_frag));
+	pipelines.poly_w1_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
+			semitrans_frag, sizeof(semitrans_frag));
 }
 
 void Renderer::init_primitive_feedback_pipelines()
@@ -1694,7 +1705,7 @@ HdTextureHandle Renderer::get_hd_texture_index(const Rect &vram_rect, bool &fast
 	}
 }
 
-void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsigned count, HdTextureHandle &hd_texture_index)
+void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsigned count, HdTextureHandle &hd_texture_index, bool &poly_w1)
 {
 	unsigned shift;
 	switch (render_state.texture_mode)
@@ -1773,6 +1784,7 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 	float min_y = float(FB_HEIGHT);
 	float x[4];
 	float y[4];
+	poly_w1 = true;
 	for (unsigned i = 0; i < count; i++)
 	{
 		float tmp_x = vertices[i].x + render_state.draw_offset_x;
@@ -1783,6 +1795,7 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 		min_y = min(min_y, tmp_y);
 		x[i] = tmp_x;
 		y[i] = tmp_y;
+		poly_w1 = poly_w1 && (vertices[i].w == 1);
 	}
 
 	// Clamp the rect.
@@ -1867,7 +1880,14 @@ std::vector<Renderer::BufferVertex> *Renderer::select_pipeline(unsigned prims, i
 	{
 		if (render_state.semi_transparent != SemiTransparentMode::None)
 		{
-			if (render_state.primitive_type == PrimitiveType::Polygon_w1)
+			if (render_state.primitive_type == PrimitiveType::Sprite)
+			{
+				for (unsigned i = 0; i < prims; i++)
+					queue.semi_trans_opaque_spr_scissor.emplace_back(queue.semi_trans_opaque_spr_scissor.size(),
+						scissor, hd_texture);
+				return &queue.semi_trans_opaque_spr;
+			}
+			else if (render_state.primitive_type == PrimitiveType::Polygon_w1)
 			{
 				for (unsigned i = 0; i < prims; i++)
 					queue.semi_trans_opaque_poly_w1_scissor.emplace_back(queue.semi_trans_opaque_poly_w1_scissor.size(),
@@ -2039,7 +2059,7 @@ void Renderer::draw_line(const Vertex *vertices)
 	// This should be plenty fast for the quite small amount of lines games render.
 	Vertex vert[4];
 	build_line_quad(vert, vertices);
-	set_primitive_type();
+	set_primitive_type(PrimitiveType::Line);
 	draw_quad(vert);
 }
 
@@ -2053,8 +2073,9 @@ void Renderer::draw_triangle(const Vertex *vertices)
 
 	BufferVertex vert[3];
 	HdTextureHandle hd_texture_index = HdTextureHandle::make_none();
-	build_attribs(vert, vertices, 3, hd_texture_index);
-	set_primitive_type();
+	bool poly_w1 = false;
+	build_attribs(vert, vertices, 3, hd_texture_index, poly_w1);
+	set_primitive_type(poly_w1 ? PrimitiveType::Polygon_w1 : PrimitiveType::Polygon);
 	const int scissor_index = queue.scissor_invariant ? -1 : int(queue.scissors.size() - 1);
 	auto *out = select_pipeline(1, scissor_index, hd_texture_index);
 	if (out)
@@ -2070,7 +2091,7 @@ void Renderer::draw_triangle(const Vertex *vertices)
 		SemiTransparentState state = { scissor_index, hd_texture_index, render_state.semi_transparent,
 		                               render_state.texture_mode != TextureMode::None,
 		                               render_state.mask_test,
-		                               render_state.primitive_type == PrimitiveType::Polygon_w1 };
+		                               render_state.primitive_type };
 
 		for (unsigned i = 0; i < 3; i++)
 			semi_trans_vertices->push_back(vert[i]);
@@ -2097,7 +2118,10 @@ void Renderer::draw_quad(const Vertex *vertices)
 	// to be very careful not to let it get invalidated by build_attribs; so any such logic should happen within
 	// build_attribs itself, and not out here.
 	HdTextureHandle hd_texture_index = HdTextureHandle::make_none();
-	build_attribs(vert, vertices, 4, hd_texture_index);
+	bool poly_w1 = false;
+	build_attribs(vert, vertices, 4, hd_texture_index, poly_w1);
+	if (render_state.primitive_type == PrimitiveType::Polygon && poly_w1)
+		render_state.primitive_type = PrimitiveType::Polygon_w1;
 	const int scissor_index = queue.scissor_invariant ? -1 : int(queue.scissors.size() - 1);
 	auto *out = select_pipeline(2, scissor_index, hd_texture_index);
 
@@ -2118,7 +2142,7 @@ void Renderer::draw_quad(const Vertex *vertices)
 		SemiTransparentState state = { scissor_index, hd_texture_index, render_state.semi_transparent,
 		                               render_state.texture_mode != TextureMode::None,
 		                               render_state.mask_test,
-		                               render_state.primitive_type == PrimitiveType::Polygon_w1 };
+		                               render_state.primitive_type };
 
 		semi_trans_vertices->push_back(vert[0]);
 		semi_trans_vertices->push_back(vert[1]);
@@ -2242,6 +2266,7 @@ void Renderer::flush_render_pass(const Rect &rect)
 	render_opaque_texture_primitives(PrimitiveType::Sprite);
 	render_opaque_texture_primitives(PrimitiveType::Polygon_w1);
 	render_opaque_texture_primitives(PrimitiveType::Polygon);
+	render_semi_transparent_opaque_texture_primitives(PrimitiveType::Sprite);
 	render_semi_transparent_opaque_texture_primitives(PrimitiveType::Polygon_w1);
 	render_semi_transparent_opaque_texture_primitives(PrimitiveType::Polygon);
 	render_semi_transparent_primitives();
@@ -2389,6 +2414,19 @@ void Renderer::render_semi_transparent_primitives()
 	auto last_state = (*states)[0];
 
 	const auto set_state = [&](const SemiTransparentState &state) {
+		auto *opaque_textured = pipelines.opaque_textured;
+		auto *semi_transparent = pipelines.semi_transparent;
+		if (state.primitive_type == PrimitiveType::Sprite)
+		{
+			opaque_textured = pipelines.opaque_spr_textured;
+			semi_transparent = pipelines.spr_semi_trans;
+		}
+		else if (state.primitive_type == PrimitiveType::Polygon_w1)
+		{
+			opaque_textured = pipelines.opaque_poly_w1_textured;
+			semi_transparent = pipelines.poly_w1_semi_trans;
+		}
+
 		cmd->set_texture(0, 0, framebuffer->get_view(), StockSampler::NearestWrap);
 		hd_texture_uniforms(state.hd_texture_index);
 		
@@ -2403,7 +2441,7 @@ void Renderer::render_semi_transparent_primitives()
 		{
 			// For opaque primitives which are just masked, we can make use of fixed function blending.
 			cmd->set_blend_enable(true);
-			cmd->set_program(state.textured ? *pipelines.opaque_textured : *pipelines.opaque_flat);
+			cmd->set_program(state.textured ? *opaque_textured : *pipelines.opaque_flat);
 			cmd->set_blend_op(VK_BLEND_OP_ADD, VK_BLEND_OP_ADD);
 			cmd->set_blend_factors(VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
 			                       VK_BLEND_FACTOR_DST_ALPHA, VK_BLEND_FACTOR_DST_ALPHA);
@@ -2428,7 +2466,7 @@ void Renderer::render_semi_transparent_primitives()
 			}
 			else
 			{
-				cmd->set_program(state.textured ? *pipelines.semi_transparent : *pipelines.opaque_flat);
+				cmd->set_program(state.textured ? *semi_transparent : *pipelines.opaque_flat);
 				cmd->set_blend_enable(true);
 				cmd->set_blend_op(VK_BLEND_OP_ADD, VK_BLEND_OP_ADD);
 				cmd->set_blend_factors(VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE,
@@ -2457,7 +2495,7 @@ void Renderer::render_semi_transparent_primitives()
 			else
 			{
 				static const float rgba[4] = { 0.5f, 0.5f, 0.5f, 0.5f };
-				cmd->set_program(state.textured ? *pipelines.semi_transparent : *pipelines.opaque_flat);
+				cmd->set_program(state.textured ? *semi_transparent : *pipelines.opaque_flat);
 				cmd->set_blend_enable(true);
 				cmd->set_blend_constants(rgba);
 				cmd->set_blend_op(VK_BLEND_OP_ADD, VK_BLEND_OP_ADD);
@@ -2485,7 +2523,7 @@ void Renderer::render_semi_transparent_primitives()
 			}
 			else
 			{
-				cmd->set_program(state.textured ? *pipelines.semi_transparent : *pipelines.opaque_flat);
+				cmd->set_program(state.textured ? *semi_transparent : *pipelines.opaque_flat);
 				cmd->set_blend_enable(true);
 				cmd->set_blend_op(VK_BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_OP_ADD);
 				cmd->set_blend_factors(VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE,
@@ -2514,7 +2552,7 @@ void Renderer::render_semi_transparent_primitives()
 			else
 			{
 				static const float rgba[4] = { 0.25f, 0.25f, 0.25f, 1.0f };
-				cmd->set_program(state.textured ? *pipelines.semi_transparent : *pipelines.opaque_flat);
+				cmd->set_program(state.textured ? *semi_transparent : *pipelines.opaque_flat);
 				cmd->set_blend_enable(true);
 				cmd->set_blend_constants(rgba);
 				cmd->set_blend_op(VK_BLEND_OP_ADD, VK_BLEND_OP_ADD);
@@ -2561,11 +2599,19 @@ void Renderer::render_semi_transparent_opaque_texture_primitives(PrimitiveType p
 {
 	auto *vertices = &queue.semi_transparent_opaque;
 	auto *scissors = &queue.semi_transparent_opaque_scissor;
+	auto *program = pipelines.opaque_semi_transparent;
 
-	if (primitive_type == PrimitiveType::Polygon_w1)
+	if (primitive_type == PrimitiveType::Sprite)
+	{
+		vertices = &queue.semi_trans_opaque_spr;
+		scissors = &queue.semi_trans_opaque_spr_scissor;
+		program = pipelines.opaque_spr_semi_trans;
+	}
+	else if (primitive_type == PrimitiveType::Polygon_w1)
 	{
 		vertices = &queue.semi_trans_opaque_poly_w1;
 		scissors = &queue.semi_trans_opaque_poly_w1_scissor;
+		program = pipelines.opaque_poly_w1_semi_trans;
 	}
 
 	if (vertices->empty())
@@ -2574,7 +2620,7 @@ void Renderer::render_semi_transparent_opaque_texture_primitives(PrimitiveType p
 	cmd->set_opaque_state();
 	cmd->set_cull_mode(VK_CULL_MODE_NONE);
 	cmd->set_depth_compare(VK_COMPARE_OP_LESS);
-	cmd->set_program(*pipelines.opaque_semi_transparent);
+	cmd->set_program(*program);
 	cmd->set_primitive_topology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	cmd->set_vertex_attrib(0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0);
 	cmd->set_vertex_attrib(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(BufferVertex, color));
@@ -2603,6 +2649,7 @@ void Renderer::render_opaque_texture_primitives(PrimitiveType primitive_type)
 	{
 		vertices = &queue.opaque_poly_w1_textured;
 		scissors = &queue.opaque_poly_w1_textured_scissor;
+		program = pipelines.opaque_poly_w1_textured;
 	}
 
 	if (vertices->empty())
@@ -2928,13 +2975,16 @@ void Renderer::reset_queue()
 	queue.opaque_scissor.clear();
 	queue.opaque_textured.clear();
 	queue.opaque_textured_scissor.clear();
-	queue.opaque_spr_textured.clear();
-	queue.opaque_spr_textured_scissor.clear();
 	queue.textures.clear();
 	queue.semi_transparent.clear();
 	queue.semi_transparent_state.clear();
 	queue.semi_transparent_opaque.clear();
 	queue.semi_transparent_opaque_scissor.clear();
+
+	queue.opaque_spr_textured.clear();
+	queue.opaque_spr_textured_scissor.clear();
+	queue.semi_trans_opaque_spr.clear();
+	queue.semi_trans_opaque_spr_scissor.clear();
 
 	queue.opaque_poly_w1.clear();
 	queue.opaque_poly_w1_scissor.clear();
