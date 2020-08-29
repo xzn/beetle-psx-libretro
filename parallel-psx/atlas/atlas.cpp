@@ -246,6 +246,8 @@ void FBAtlas::sync_domain(Domain domain, const Rect &rect)
 
 	// We're asserting that a region is up to date, but it's
 	// not, so we have to resolve it.
+	//
+	// FIXME (xzn) this code looks dead.
 	if ((bits & dirty_bits) == 0)
 		return;
 
