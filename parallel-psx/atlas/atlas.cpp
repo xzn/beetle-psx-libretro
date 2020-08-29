@@ -494,7 +494,7 @@ void FBAtlas::notify_external_barrier(StatusFlags domains)
 
 void FBAtlas::pipeline_barrier(StatusFlags domains)
 {
-	if (domains & (STATUS_FRAGMENT_SFB_WRITE | STATUS_FRAGMENT_FB_READ))
+	if (domains & (STATUS_FRAGMENT_SFB_WRITE | STATUS_FRAGMENT_SFB_READ | STATUS_FRAGMENT_FB_READ))
 		flush_render_pass();
 	listener->hazard(domains);
 	notify_external_barrier(domains);
