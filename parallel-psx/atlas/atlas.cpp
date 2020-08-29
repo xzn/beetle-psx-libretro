@@ -156,7 +156,7 @@ bool FBAtlas::write_domain(Domain domain, Stage stage, const Rect &rect)
 		for (unsigned x = xbegin; x <= xend; x++)
 			info(x, y) = (info(x, y) & ~STATUS_OWNERSHIP_MASK) | resolve_domains;
 
-	return (write_domains & STATUS_FRAGMENT_FB_READ) != 0;
+	return (write_domains & STATUS_FRAGMENT_SFB_READ) != 0;
 }
 
 void FBAtlas::read_domain(Domain domain, Stage stage, const Rect &rect)
