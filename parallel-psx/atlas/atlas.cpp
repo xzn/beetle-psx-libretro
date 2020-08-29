@@ -110,17 +110,18 @@ bool FBAtlas::write_domain(Domain domain, Stage stage, const Rect &rect)
 	{
 		hazard_domains = STATUS_FB_WRITE | STATUS_FB_READ;
 		if (stage == Stage::Compute)
-			resolve_domains = STATUS_COMPUTE_FB_WRITE | STATUS_FB_ONLY;
+			resolve_domains = STATUS_COMPUTE_FB_WRITE;
 		else if (stage == Stage::Transfer)
-			resolve_domains = STATUS_TRANSFER_FB_WRITE | STATUS_FB_ONLY;
+			resolve_domains = STATUS_TRANSFER_FB_WRITE;
 		else if (stage == Stage::Fragment)
 		{
 			// Write-after-write in fragment is handled implicitly.
 			// Write-after-read means rendering to a block after reading it as a texture.
 			// This is a hazard we must handle.
-			hazard_domains &= ~STATUS_FRAGMENT;
-			resolve_domains = STATUS_FRAGMENT_FB_WRITE | STATUS_FB_ONLY;
+			hazard_domains &= ~STATUS_FRAGMENT_FB_WRITE;
+			resolve_domains = STATUS_FRAGMENT_FB_WRITE;
 		}
+		resolve_domains |= STATUS_FB_ONLY;
 	}
 	else
 	{
@@ -132,7 +133,7 @@ bool FBAtlas::write_domain(Domain domain, Stage stage, const Rect &rect)
 			// Write-after-write in fragment is handled implicitly.
 			// Write-after-read means rendering to a block after reading it as a texture.
 			// This is a hazard we must handle.
-			hazard_domains &= ~STATUS_FRAGMENT;
+			hazard_domains &= ~STATUS_FRAGMENT_SFB_WRITE;
 			resolve_domains = STATUS_FRAGMENT_SFB_WRITE;
 		}
 		else if (stage == Stage::Transfer)
