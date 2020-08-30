@@ -312,10 +312,15 @@ void Renderer::init_primitive_pipelines()
 	// Use the default pipeline for sprites and polygons with w = 1
 	pipelines.opaque_spr_textured = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
 			opaque_textured_frag, sizeof(opaque_textured_frag));
+#if 1
 	pipelines.opaque_spr_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
 			opaque_semitrans_frag, sizeof(opaque_semitrans_frag));
 	pipelines.spr_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
 			semitrans_frag, sizeof(semitrans_frag));
+#else
+	pipelines.opaque_spr_semi_trans = pipelines.opaque_semi_transparent;
+	pipelines.spr_semi_trans = pipelines.semi_transparent;
+#endif
 
 #if 0
 	pipelines.opaque_poly_w1_textured = pipelines.opaque_spr_textured;
@@ -2239,10 +2244,12 @@ void Renderer::flush_render_pass(const Rect &rect)
 
 	if (msaa > 1)
 	{
+#if 0
 		info.num_color_attachments = 2;
-		info.color_attachments[1] = info.color_attachments[0];
-		info.color_attachments[0] = &scaled_framebuffer_msaa->get_view();
 		info.store_attachments |= 1 << 1;
+		info.color_attachments[1] = info.color_attachments[0];
+#endif
+		info.color_attachments[0] = &scaled_framebuffer_msaa->get_view();
 	}
 
 	RenderPassInfo::Subpass subpass;
@@ -2259,11 +2266,13 @@ void Renderer::flush_render_pass(const Rect &rect)
 		subpass.input_attachments[0] = 0;
 	}
 
+#if 0
 	if (msaa > 1)
 	{
 		subpass.resolve_attachments[0] = 1;
 		subpass.num_resolve_attachments = 1;
 	}
+#endif
 
 	if (clear_candidate)
 	{
@@ -2300,13 +2309,48 @@ void Renderer::flush_render_pass(const Rect &rect)
 
 	cmd->end_render_pass();
 
-	// Render passes are implicitly synchronized.
-	cmd->image_barrier(*scaled_framebuffer,
-		VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-		VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT);
+	if (msaa > 1)
+	{
+		cmd->image_barrier(*scaled_framebuffer,
+			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+
+		cmd->image_barrier(*scaled_framebuffer_msaa,
+			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+
+		VkImageSubresourceLayers subres = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+		VkOffset3D offset = { int(rect.x * scaling), int(rect.y * scaling), 0 };
+		VkExtent3D extent = { rect.width * scaling, rect.height * scaling, 1 };
+		VkImageResolve region = { subres, offset, subres, offset, extent };
+		vkCmdResolveImage(cmd->get_command_buffer(),
+			scaled_framebuffer_msaa->get_image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			scaled_framebuffer->get_image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &region
+		);
+
+		cmd->image_barrier(*scaled_framebuffer,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0);
+
+		cmd->image_barrier(*scaled_framebuffer_msaa,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+			VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+	}
+	else
+		// Render passes are implicitly synchronized.
+		cmd->image_barrier(*scaled_framebuffer,
+			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT);
 
 	reset_queue();
 }
