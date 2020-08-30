@@ -40,7 +40,7 @@ vec4 sample_vram_atlas(vec2 uvv)
         // coord = mod((vBaseUV + uvv), vec2(1024, 512));
         coord = vBaseUV + uvv;
 
-    return texelFetch(uFramebuffer, ivec2(round(coord * vScale)), 0);
+    return texelFetch(uFramebuffer, ivec2(coord * vScale), 0);
 }
 
 // Take a normalized color and convert it into a 16bit 1555 ABGR
