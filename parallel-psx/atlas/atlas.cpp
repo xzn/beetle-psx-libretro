@@ -399,6 +399,8 @@ void FBAtlas::extend_render_pass(const Rect &rect, bool scissor)
 		sync_domain(Domain::Scaled, renderpass.rect);
 		if (write_domain(Domain::Scaled, Stage::Fragment, renderpass.rect))
 		{
+			renderpass.inside = true;
+			flush_render_pass();
 			// If render pass was flushed here due to write-after-read hazards, set rect to
 			// our new scissored_rect instead.
 			renderpass.rect = scissored_rect;
