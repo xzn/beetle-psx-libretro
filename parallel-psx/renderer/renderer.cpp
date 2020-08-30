@@ -2279,21 +2279,6 @@ void Renderer::flush_render_pass(const Rect &rect)
 	info.render_area.offset = { int(rect.x * scaling), int(rect.y * scaling) };
 	info.render_area.extent = { rect.width * scaling, rect.height * scaling };
 
-	// TODO without this sometimes depth isn't cleared
-	// need furthur investigation
-#if 0
-	cmd->image_barrier(info.depth_stencil->get_image(),
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-		VK_ACCESS_SHADER_READ_BIT,
-		VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-		VK_ACCESS_SHADER_READ_BIT
-	);
-#endif
-
 	counters.render_passes++;
 	cmd->begin_render_pass(info);
 	cmd->set_scissor(info.render_area);
