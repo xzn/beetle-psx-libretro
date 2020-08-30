@@ -147,6 +147,8 @@ bool FBAtlas::write_domain(Domain domain, Stage stage, const Rect &rect)
 
 	// Trying to update VRAM before fragment is done reading it.
 	// We could use copy-on-write here to avoid flushing, but this scenario is very rare.
+	//
+	// FIXME (xzn) this code looks dead, what was its intention?
 	if (write_domains & STATUS_TEXTURE_READ)
 		flush_render_pass();
 
@@ -182,12 +184,12 @@ void FBAtlas::read_domain(Domain domain, Stage stage, const Rect &rect)
 			resolve_domains = STATUS_TRANSFER_FB_READ;
 		else if (stage == Stage::Fragment)
 		{
-			hazard_domains &= ~STATUS_FRAGMENT;
+			hazard_domains &= ~STATUS_FRAGMENT_FB_READ;
 			resolve_domains = STATUS_FRAGMENT_FB_READ;
 		}
 		else if (stage == Stage::FragmentTexture)
 		{
-			hazard_domains &= ~STATUS_FRAGMENT;
+			hazard_domains &= ~(STATUS_FRAGMENT_SFB_READ | STATUS_TEXTURE_READ);
 			resolve_domains = STATUS_FRAGMENT_FB_READ | STATUS_TEXTURE_READ;
 		}
 	}
@@ -200,12 +202,12 @@ void FBAtlas::read_domain(Domain domain, Stage stage, const Rect &rect)
 			resolve_domains = STATUS_TRANSFER_SFB_READ;
 		else if (stage == Stage::Fragment)
 		{
-			hazard_domains &= ~STATUS_FRAGMENT;
+			hazard_domains &= ~STATUS_FRAGMENT_SFB_READ;
 			resolve_domains = STATUS_FRAGMENT_SFB_READ;
 		}
 		else if (stage == Stage::FragmentTexture)
 		{
-			hazard_domains &= ~STATUS_FRAGMENT;
+			hazard_domains &= ~(STATUS_FRAGMENT_SFB_READ | STATUS_TEXTURE_READ);
 			resolve_domains = STATUS_FRAGMENT_SFB_READ | STATUS_TEXTURE_READ;
 		}
 	}
