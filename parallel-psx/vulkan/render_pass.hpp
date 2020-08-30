@@ -158,6 +158,11 @@ public:
 		       format_has_stencil_aspect(depth_stencil);
 	}
 
+	bool has_msaa() const
+	{
+		return msaa;
+	}
+
 private:
 	Device *device;
 	VkRenderPass render_pass = VK_NULL_HANDLE;
@@ -165,6 +170,7 @@ private:
 	VkFormat color_attachments[VULKAN_NUM_ATTACHMENTS] = {};
 	VkFormat depth_stencil = VK_FORMAT_UNDEFINED;
 	std::vector<SubpassInfo> subpasses;
+	bool msaa = false;
 
 	void setup_subpasses(const VkRenderPassCreateInfo &create_info);
 

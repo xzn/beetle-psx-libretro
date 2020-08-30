@@ -298,6 +298,9 @@ public:
 	             unsigned buffer_barriers, const VkBufferMemoryBarrier *buffers,
 	             unsigned image_barriers, const VkImageMemoryBarrier *images);
 
+	void memory_barrier(VkPipelineStageFlags src_stages, VkAccessFlags src_access, VkPipelineStageFlags dst_stages,
+	                    VkAccessFlags dst_access, VkDependencyFlags dep_flags);
+
 	void buffer_barrier(const Buffer &buffer, VkPipelineStageFlags src_stage, VkAccessFlags src_access,
 	                    VkPipelineStageFlags dst_stage, VkAccessFlags dst_access);
 
@@ -623,6 +626,7 @@ private:
 	const Framebuffer *framebuffer = nullptr;
 	const RenderPass *actual_render_pass = nullptr;
 	const RenderPass *compatible_render_pass = nullptr;
+	bool msaa = false;
 
 	VertexAttribState attribs[VULKAN_NUM_VERTEX_ATTRIBS] = {};
 	IndexState index = {};

@@ -259,6 +259,15 @@ void CommandBuffer::barrier(VkPipelineStageFlags src_stages, VkAccessFlags src_a
 	vkCmdPipelineBarrier(cmd, src_stages, dst_stages, 0, 1, &barrier, 0, nullptr, 0, nullptr);
 }
 
+void CommandBuffer::memory_barrier(VkPipelineStageFlags src_stages, VkAccessFlags src_access, VkPipelineStageFlags dst_stages,
+                                   VkAccessFlags dst_access, VkDependencyFlags dep_flags)
+{
+	VkMemoryBarrier barrier = { VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+	barrier.srcAccessMask = src_access;
+	barrier.dstAccessMask = dst_access;
+	vkCmdPipelineBarrier(cmd, src_stages, dst_stages, dep_flags, 1, &barrier, 0, nullptr, 0, nullptr);
+}
+
 void CommandBuffer::barrier(VkPipelineStageFlags src_stages, VkPipelineStageFlags dst_stages, unsigned barriers,
                             const VkMemoryBarrier *globals, unsigned buffer_barriers,
                             const VkBufferMemoryBarrier *buffers, unsigned image_barriers,
@@ -538,6 +547,7 @@ void CommandBuffer::begin_render_pass(const RenderPassInfo &info, VkSubpassConte
 	framebuffer = &device->request_framebuffer(info);
 	compatible_render_pass = &framebuffer->get_compatible_render_pass();
 	actual_render_pass = &device->request_render_pass(info, false);
+	msaa = actual_render_pass->has_msaa();
 
 	init_viewport_scissor(info, framebuffer);
 
@@ -587,6 +597,7 @@ void CommandBuffer::end_render_pass()
 	framebuffer = nullptr;
 	actual_render_pass = nullptr;
 	compatible_render_pass = nullptr;
+	msaa = false;
 	begin_compute();
 }
 
@@ -1660,8 +1671,10 @@ void CommandBuffer::draw(uint32_t vertex_count, uint32_t instance_count, uint32_
 	VK_ASSERT(!is_compute);
 	flush_render_state();
 	// HACK fixes broken MSAA resolves on AMD hardware
-	barrier(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
+	if (msaa)
+		memory_barrier(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_DEPENDENCY_BY_REGION_BIT);
 	vkCmdDraw(cmd, vertex_count, instance_count, first_vertex, first_instance);
 }
 

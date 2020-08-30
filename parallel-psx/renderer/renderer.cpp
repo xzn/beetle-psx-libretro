@@ -317,12 +317,15 @@ void Renderer::init_primitive_pipelines()
 	pipelines.spr_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
 			semitrans_frag, sizeof(semitrans_frag));
 
-	pipelines.opaque_poly_w1_textured = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
-			opaque_textured_frag, sizeof(opaque_textured_frag));
-	pipelines.opaque_poly_w1_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
-			opaque_semitrans_frag, sizeof(opaque_semitrans_frag));
-	pipelines.poly_w1_semi_trans = device.request_program(opaque_textured_vert, sizeof(opaque_textured_vert),
-			semitrans_frag, sizeof(semitrans_frag));
+#if 0
+	pipelines.opaque_poly_w1_textured = pipelines.opaque_spr_textured;
+	pipelines.opaque_poly_w1_semi_trans = pipelines.opaque_spr_semi_trans;
+	pipelines.poly_w1_semi_trans = pipelines.spr_semi_trans;
+#else
+	pipelines.opaque_poly_w1_textured = pipelines.opaque_textured;
+	pipelines.opaque_poly_w1_semi_trans = pipelines.opaque_semi_transparent;
+	pipelines.poly_w1_semi_trans = pipelines.semi_transparent;
+#endif
 }
 
 void Renderer::init_primitive_feedback_pipelines()

@@ -427,6 +427,8 @@ RenderPass::RenderPass(Hash hash, Device *device, const RenderPassInfo &info)
 	uint32_t color_self_dependencies = 0;
 	// 1 << subpass bit set if there are depth-stencil attachment self-dependencies in the subpass.
 	uint32_t depth_self_dependencies = 0;
+	// 1 << subpass bit set if there are resolve attachment in the subpass.
+	uint32_t msaa_self_dependencies = 0;
 
 	// 1 << subpass bit set if any input attachment is read in the subpass.
 	uint32_t input_attachment_read = 0;
@@ -479,6 +481,11 @@ RenderPass::RenderPass(Hash hash, Device *device, const RenderPassInfo &info)
 			if (!used && (implicit_bottom_of_pipe & (1u << attachment)))
 				external_bottom_of_pipe_dependencies |= 1u << subpass;
 
+			if (resolve)
+			{
+				msaa_self_dependencies |=  1u << subpass;
+				msaa = true;
+			}
 			if (resolve && input) // If used as both resolve attachment and input attachment in same subpass, need GENERAL.
 			{
 				current_layout = VK_IMAGE_LAYOUT_GENERAL;
@@ -712,7 +719,7 @@ RenderPass::RenderPass(Hash hash, Device *device, const RenderPassInfo &info)
 	             });
 
 	// Queue up self-dependencies (COLOR | DEPTH) -> INPUT.
-	for_each_bit(color_self_dependencies | depth_self_dependencies, [&](unsigned subpass) {
+	for_each_bit(color_self_dependencies | depth_self_dependencies | msaa_self_dependencies, [&](unsigned subpass) {
 		external_dependencies.emplace_back();
 		auto &dep = external_dependencies.back();
 		dep.srcSubpass = subpass;
@@ -731,8 +738,16 @@ RenderPass::RenderPass(Hash hash, Device *device, const RenderPassInfo &info)
 			dep.srcAccessMask |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 		}
 
-		dep.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		dep.dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+		if (msaa_self_dependencies & (1u << subpass))
+		{
+			dep.srcStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dep.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			dep.dstStageMask |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dep.dstAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		}
+
+		dep.dstStageMask |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		dep.dstAccessMask |= VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 	});
 
 	// Flush and invalidate caches between each subpass.
