@@ -516,6 +516,7 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
    uint32_t clut          = 0;
    unsigned sv            = 0;
    bool invalidW          = false;
+   bool skip_pgxp         = false;
    //uint32_t tpage       = 0;
 
    vertices[0].x          = 0;
@@ -574,7 +575,8 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
       {
          memcpy(&vertices[0], &gpu->InQuad_F3Vertices[1], 2 * sizeof(tri_vertex));
          clut = gpu->InQuad_clut;
-       invalidW = gpu->InQuad_invalidW;
+         invalidW = gpu->InQuad_invalidW;
+         skip_pgxp = gpu->InQuad_skip_pgxp;
          sv = 2;
       }
    }
@@ -641,14 +643,30 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
 
    // iCB: If any vertices lack w components then set all to 1
    if (invalidW)
+   {
+      for (unsigned v = 0; v < 3; v++)
+      {
+         if (
+            fabs(vertices[v].precise[0] - (float)vertices[v].x) > 2. ||
+            fabs(vertices[v].precise[1] - (float)vertices[v].y) > 2.
+         )
+         {
+            skip_pgxp = true;
+            break;
+         }
+      }
       for (unsigned v = 0; v < 3; v++)
       {
          // HACK Set x and y to non pgxp as well since they are likely degenerate
          // This fixes a few glitches when 2D elements are drawn as polygons (xzn)
-         vertices[v].precise[0] = (float)vertices[v].x;
-         vertices[v].precise[1] = (float)vertices[v].y;
+         if (skip_pgxp)
+         {
+            vertices[v].precise[0] = (float)vertices[v].x;
+            vertices[v].precise[1] = (float)vertices[v].y;
+         }
          vertices[v].precise[2] = 1.f;
       }
+   }
 
    // Calculated UV offsets (needed for hardware renderers and software with scaling)
    // Do one time updates for primitive
@@ -672,6 +690,7 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
          memcpy(&gpu->InQuad_F3Vertices[0], &vertices[0], sizeof(tri_vertex) * 3);
          gpu->InQuad_clut = clut;
          gpu->InQuad_invalidW = invalidW;
+         gpu->InQuad_skip_pgxp = skip_pgxp;
       }
    }
 
@@ -682,7 +701,7 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
        //PSX_WARNING("[GPU] Triangle height too large: %d", (vertices[2].y - vertices[0].y));
 		 if (numvertices == 4)
 			 gpu->killQuadPart |= (gpu->InCmd == INCMD_QUAD) ? 1 : 2;
-     
+
 		 // hardware renderer still needs to render first triangle
 		 if ((rsx_intf_is_type() == RSX_SOFTWARE) || (gpu->killQuadPart != 2))
 			 return;
@@ -695,7 +714,7 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
        //PSX_WARNING("[GPU] Triangle width too large: %d %d %d", abs(vertices[2].x - vertices[0].x), abs(vertices[2].x - vertices[1].x), abs(vertices[1].x - vertices[0].x));
 		 if (numvertices == 4)
 			 gpu->killQuadPart |= (gpu->InCmd == INCMD_QUAD) ? 1 : 2;
-		 
+
 		 // hardware renderer still needs to render first triangle
 		 if ((rsx_intf_is_type() == RSX_SOFTWARE) || (gpu->killQuadPart != 2))
 			return;
