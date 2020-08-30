@@ -1659,6 +1659,9 @@ void CommandBuffer::draw(uint32_t vertex_count, uint32_t instance_count, uint32_
 	VK_ASSERT(current_program);
 	VK_ASSERT(!is_compute);
 	flush_render_state();
+	// HACK fixes broken MSAA resolves on AMD hardware
+	barrier(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT);
 	vkCmdDraw(cmd, vertex_count, instance_count, first_vertex, first_instance);
 }
 
