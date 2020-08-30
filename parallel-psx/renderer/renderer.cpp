@@ -2309,6 +2309,8 @@ void Renderer::flush_render_pass(const Rect &rect)
 
 	cmd->end_render_pass();
 
+	// TODO we should resolve during scanout instead of end of render pass
+	// which is wasteful and super slow
 	if (msaa > 1)
 	{
 		cmd->image_barrier(*scaled_framebuffer,
