@@ -23,15 +23,11 @@ const vec2 FB_SIZE = vec2(1024.0, 512.0);
 
 void main()
 {
-   gl_Position = vec4(Position.xy / FB_SIZE * 2.0 - 1.0, Position.z, 1.0) * Position.w;
+   // From center of pixel so 0.5..1023.5, 0.5..511.5, then divide and adjust to screen coord
+   gl_Position = vec4((Position.xy + vec2(0.5, 0.5)) / FB_SIZE * 2.0 - 1.0, Position.z, 1.0) * Position.w;
    vColor = Color;
 #ifdef TEXTURED
-   // iCB: Offset UVs by half a pixel to account for rounding errors in projection
-   // vUV = vec2(UV.xy) + vec2(0.5 / 1024.0, 0.5 / 512.0);
-
-   // UV is a vector of integers so actually offset by half a pixel would be
-   // + vec2(0.5, 0.5), but it makes the textures wrong
-   vUV = vec2(UV.xy);
+   vUV = vec2(UV.xy) + vec2(0.5, 0.5);
    vParam = Param;
    vBaseUV = UV.zw;
    vWindow = ivec4(Window);
