@@ -558,7 +558,7 @@ vec4 resampler(vec4 x)
 {
    vec4 res;
 
-   res = (x==vec4(0.0, 0.0, 0.0, 0.0)) ?  vec4(wa*wb)  :  sin(x*wa)*sin(x*wb)/(x*x);
+   res = any(equal(x,vec4(0.0, 0.0, 0.0, 0.0))) ?  vec4(wa*wb)  :  sin(x*wa)*sin(x*wb)/(x*x);
 
    return res;
 }
