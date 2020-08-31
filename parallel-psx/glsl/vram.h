@@ -11,7 +11,7 @@ layout(set = 0, binding = 0) uniform mediump sampler2D uFramebuffer;
 
 vec2 clamp_coord(vec2 coord)
 {
-	return clamp(coord.xy, vec2(vTexLimits.xy), vec2(vTexLimits.zw));
+	return clamp(coord.xy, vec2(vTexLimits.xy) + vec2(0.5, 0.5), vec2(vTexLimits.zw) + vec2(0.5, 0.5));
 }
 
 // Nearest neighbor
