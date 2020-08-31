@@ -670,7 +670,8 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
 
    // Calculated UV offsets (needed for hardware renderers and software with scaling)
    // Do one time updates for primitive
-   if (textured && (gpu->InCmd != INCMD_QUAD))
+   // Fixed in Vulkan by having vertex shader shift coordinate to center of texel
+   if (textured && (gpu->InCmd != INCMD_QUAD) && rsx_intf_is_type() != RSX_VULKAN)
       Calc_UVOffsets(gpu, vertices, numvertices);
 
    if(numvertices == 4)
