@@ -1108,7 +1108,7 @@ ImageHandle Renderer::scanout_to_texture()
 	}
 	else if (readout)
 	{
-		if (RenderState::READOUT_SSAA == render_state.readout_type)
+		if (ssaa)
 			output_type = READOUT_SSAA;
 		else if (adaptive_smoothing)
 			output_type = READOUT_ADAPTIVE_SMOOTHING;
