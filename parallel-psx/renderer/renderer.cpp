@@ -1069,6 +1069,8 @@ ImageHandle Renderer::scanout_to_texture()
 	}
 
 	bool bpp24 = render_state.scanout_mode == ScanoutMode::BGR24;
+	if (bpp24)
+		readout = false;
 	bool yuv24 = bpp24 && render_state.scanout_mdec_filter == ScanoutFilter::MDEC_YUV;
 	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
 	bool adaptive_smoothing = render_state.adaptive_smoothing && scaling > 1;
