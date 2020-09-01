@@ -1073,18 +1073,19 @@ ImageHandle Renderer::scanout_to_texture()
 	bool ssaa = render_state.scanout_filter == ScanoutFilter::SSAA && scaling != 1;
 	bool adaptive_smoothing = render_state.adaptive_smoothing && scaling > 1;
 
-	if (!readout && (bpp24 || ssaa))
+	// TODO change this variable name to something descriptive..
+	if (!readout)
 	{
-		auto tmp = rect;
 		if (bpp24)
 		{
+			auto tmp = rect;
 			tmp.width = (tmp.width * 3 + 1) / 2;
 			tmp.width = min(tmp.width, FB_WIDTH - tmp.x);
+			atlas.read_fragment(Domain::Unscaled, tmp);
 		}
-		atlas.read_fragment(Domain::Unscaled, tmp);
+		else
+			atlas.read_fragment(Domain::Scaled, rect);
 	}
-	else
-		atlas.read_fragment(Domain::Scaled, rect);
 
 	ensure_command_buffer();
 
