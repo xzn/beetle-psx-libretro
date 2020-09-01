@@ -1,4 +1,5 @@
 #include "psx.h"
+#include "../../beetle_psx_globals.h"
 #include "../../rsx/rsx_intf.h"
 
 #include "gpu_common.h"
@@ -161,10 +162,13 @@ void Finalise_UVLimits(PS_GPU *gpu)
 
 		// In nearest neighbor, we'll get *very* close to this UV, but not close enough to actually sample it.
 		// If du/dx or dv/dx are negative, we probably need to invert this though ...
-		if (max_u > min_u)
-			max_u--;
-		if (max_v > min_v)
-			max_v--;
+		if (rsx_intf_is_type() != RSX_VULKAN || psx_gpu_upscale_shift_common != 0)
+		{
+			if (max_u > min_u)
+				max_u--;
+			if (max_v > min_v)
+				max_v--;
+		}
 
 		// If there's no wrapping, we can prewrap and avoid fallback.
 		if ((max_u & 0xff00) == (min_u & 0xff00))

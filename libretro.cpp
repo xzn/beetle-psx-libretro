@@ -3390,63 +3390,55 @@ static void check_variables(bool startup)
          }
       }
 
-      if (hw_renderer)
+      var.key = BEETLE_OPT(internal_resolution);
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       {
-         psx_gpu_upscale_shift = 0;
+         uint8_t new_upscale_shift;
+         uint8_t val = atoi(var.value);
+
+         // Upscale must be a power of two
+         assert((val & (val - 1)) == 0);
+
+         // Crappy "ffs" implementation since the standard function is not
+         // widely supported by libc in the wild
+         for (new_upscale_shift = 0; (val & 1) == 0; ++new_upscale_shift)
+            val >>= 1;
+         psx_gpu_upscale_shift_common = new_upscale_shift;
       }
       else
-      {
-         var.key = BEETLE_OPT(internal_resolution);
-         if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-         {
-            uint8_t new_upscale_shift;
-            uint8_t val = atoi(var.value);
+         psx_gpu_upscale_shift_common = 0;
 
-            // Upscale must be a power of two
-            assert((val & (val - 1)) == 0);
-
-            // Crappy "ffs" implementation since the standard function is not
-            // widely supported by libc in the wild
-            for (new_upscale_shift = 0; (val & 1) == 0; ++new_upscale_shift)
-               val >>= 1;
-            psx_gpu_upscale_shift = new_upscale_shift;
-         }
-         else
-            psx_gpu_upscale_shift = 0;
-      }
+      if (hw_renderer)
+         psx_gpu_upscale_shift = 0;
+      else
+         psx_gpu_upscale_shift = psx_gpu_upscale_shift_common;
    }
    else
    {
       rsx_intf_refresh_variables();
 
-      switch (rsx_intf_is_type())
+      var.key = BEETLE_OPT(internal_resolution);
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       {
-         case RSX_SOFTWARE:
-            var.key = BEETLE_OPT(internal_resolution);
+         uint8_t new_upscale_shift;
+         uint8_t val = atoi(var.value);
 
-            if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-            {
-               uint8_t new_upscale_shift;
-               uint8_t val = atoi(var.value);
+         // Upscale must be a power of two
+         assert((val & (val - 1)) == 0);
 
-               // Upscale must be a power of two
-               assert((val & (val - 1)) == 0);
-
-               // Crappy "ffs" implementation since the standard function is not
-               // widely supported by libc in the wild
-               for (new_upscale_shift = 0; (val & 1) == 0; ++new_upscale_shift)
-                  val >>= 1;
-               psx_gpu_upscale_shift = new_upscale_shift;
-            }
-            else
-               psx_gpu_upscale_shift = 0;
-
-            break;
-         case RSX_OPENGL:
-         case RSX_VULKAN:
-            psx_gpu_upscale_shift = 0;
-            break;
+         // Crappy "ffs" implementation since the standard function is not
+         // widely supported by libc in the wild
+         for (new_upscale_shift = 0; (val & 1) == 0; ++new_upscale_shift)
+            val >>= 1;
+         psx_gpu_upscale_shift_common = new_upscale_shift;
       }
+      else
+         psx_gpu_upscale_shift_common = 0;
+
+      if (rsx_intf_is_type() != RSX_SOFTWARE)
+         psx_gpu_upscale_shift = 0;
+      else
+         psx_gpu_upscale_shift = psx_gpu_upscale_shift_common;
    }
 
    var.key = BEETLE_OPT(dither_mode);
