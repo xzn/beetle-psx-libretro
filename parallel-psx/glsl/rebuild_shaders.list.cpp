@@ -1,27 +1,26 @@
 #include "rebuild_shaders.h"
 
-// prog: <file.vert>, <file.frag>, (<def>|<opt>)*
-// prog: <file.comp>, (<def>|<opt>)*
+// If the short description below looks confusing just copy and paste,
+// it should just works.
 
-// one of
-// def: (<string>|<def>|<opt>)*
-
-// combinations of
-// opt: (<string>|<def>|<opt>)*
+// prog: <file.vert>, <file.frag>, (<one_of>|<all_of>)*
+// prog: <file.comp>, (<one_of>|<all_of>)*
+// one_of: (<string>|<one_of>|<all_of>)*
+// all_of: (<string>|<one_of>|<all_of>)*
 
 const ShaderList glsl_shader_list = shaders(
     prog(
         "primitive.vert", "primitive.frag",
-        def(
+        one_of(
             "",
-            opt(
+            all_of(
                 "TEXTURED",
-                def(
+                one_of(
                     "OPAQUE",
                     "SEMI_TRANS_OPAQUE",
                     "SEMI_TRANS"
                 ),
-                def(
+                one_of(
                     "",
                     "FILTER_XBR",
                     "FILTER_BILINEAR",
