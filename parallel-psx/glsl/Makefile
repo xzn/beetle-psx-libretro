@@ -59,6 +59,7 @@ DEPS = $(SOURCES_CXX:.cpp=.d)
 CXXFLAGS += $(FLAGS)
 
 all: $(TARGET)
+	./$(TARGET)
 
 -include $(DEPS)
 
