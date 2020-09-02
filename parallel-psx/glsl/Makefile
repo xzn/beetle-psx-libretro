@@ -56,7 +56,7 @@ endif
 
 OBJECTS = $(SOURCES_CXX:.cpp=.o)
 DEPS = $(SOURCES_CXX:.cpp=.d)
-CXXFLAGS += $(FLAGS)
+CXXFLAGS += $(FLAGS) -std=c++17
 
 all: $(TARGET)
 	./$(TARGET)

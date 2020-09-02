@@ -3,10 +3,12 @@
 // If the short description below looks confusing just copy and paste,
 // it should just works.
 
-// prog: <file.vert>, <file.frag>, (<one_of>|<all_of>)*
-// prog: <file.comp>, (<one_of>|<all_of>)*
-// one_of: (<string>|<one_of>|<all_of>)*
-// all_of: (<string>|<one_of>|<all_of>)*
+// shaders: <prog>, *
+// prog: <file.vert>, <file.frag>, <def>
+// prog: <file.comp>, <def>
+// one_of: <def>
+// all_of: <def>
+// <def>: (<string> | <one_of> | <all_of>), *
 
 const ShaderList glsl_shader_list = shaders(
     prog(
