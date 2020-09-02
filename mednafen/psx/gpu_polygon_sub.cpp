@@ -22,7 +22,7 @@ void Calc_UVOffsets(PS_GPU *gpu, tri_vertex *vertices, unsigned count)
 	// or similar which should not share edges, which leads to this unfortunate code below.
 	//
 	// Only apply this workaround for quads.
-	if (count == 4)
+	if (count == 4 && (rsx_intf_is_type() != RSX_VULKAN || psx_gpu_upscale_shift_common != 0))
 	{
 		// It might be faster to do more direct checking here, but the code below handles primitives in any order
 		// and orientation, and is far more SIMD-friendly if needed.
