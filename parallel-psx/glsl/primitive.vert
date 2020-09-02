@@ -26,13 +26,13 @@ void main()
 #ifdef TEXTURED
    vec2 off = vec2(0.5, 0.5) * float(Scale == 1);
 #else
-   vec2 off = vec2(0, 0);
+   vec2 off = vec2(0, 0); // TODO Scale for flat
 #endif
    // From center of pixel so 0.5..1023.5, 0.5..511.5, then divide and adjust to screen coord
    gl_Position = vec4((Position.xy + off) / FB_SIZE * 2.0 - 1.0, Position.z, 1.0) * Position.w;
    vColor = Color;
 #ifdef TEXTURED
-   vUV = vec2(UV.xy); // + off; this is incorrect since depending on the sign of (u - v) this could be (- off)
+   vUV = vec2(UV.xy) + off; // this is incorrect since depending on the sign of (u - v) this could be (- off)
    vParam = Param;
    vBaseUV = UV.zw;
    vWindow = ivec4(Window);
