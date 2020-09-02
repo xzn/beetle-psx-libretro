@@ -1,10 +1,12 @@
 #include "rebuild_shaders.h"
 
+#include <concepts>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <optional>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -33,11 +35,11 @@ struct overloaded : Ts...
 template <class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
-int generate_program(const ShaderList::Program &p)
+int generate_program(const Program &p)
 {
 	std::visit(overloaded{
-	               [](std::pair<std::string, std::string> f) {},
-	               [](std::string f) {},
+	               [](Graphic f) {},
+	               [](Compute f) {},
 	           },
 	           p.files);
 	return 0;

@@ -1,33 +1,33 @@
 #include "rebuild_shaders.h"
 
-// shaders: <prog>, *
-// prog: <file.vert>, <file.frag>, <def>
-// prog: <file.comp>, <def>
-// one_of: <def>
-// all_of: <def>
-// <def>: (<string> | <one_of> | <all_of>), *
+// ShaderList{{<Program>, *}}
+// Program{Graphic{<std::string file.vert>, <std::string file.frag>}, <Define>}
+// Program{Compute{<std::string file.comp>}, <Define>}
+// OneOf{{<Define>, *}}
+// AllOf{{<Define>, *}}
+// <Define> = <std::string> | <OneOf> | <AllOf>
 
-const ShaderList shader_list = shaders(
-    prog(
-        "primitive.vert", "primitive.frag",
-        one_of(
+const ShaderList shader_list = ShaderList{{
+    Program{
+        Graphic{"primitive.vert", "primitive.frag"},
+        OneOf{{
             "",
-            all_of(
+            AllOf{{
                 "TEXTURED",
-                one_of(
+                OneOf{{
                     "OPAQUE",
                     "SEMI_TRANS_OPAQUE",
                     "SEMI_TRANS"
-                ),
-                one_of(
+                }},
+                OneOf{{
                     "",
                     "FILTER_XBR",
                     "FILTER_BILINEAR",
                     "FILTER_3POINT",
                     "FILTER_JINC2",
                     "FILTER_SABR"
-                )
-            )
-        )
-    )
-);
+                }}
+            }}
+        }}
+    }
+}};
