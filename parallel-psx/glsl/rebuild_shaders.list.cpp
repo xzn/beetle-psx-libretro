@@ -1,8 +1,5 @@
 #include "rebuild_shaders.h"
 
-// If the short description below looks confusing just copy and paste,
-// it should just works.
-
 // shaders: <prog>, *
 // prog: <file.vert>, <file.frag>, <def>
 // prog: <file.comp>, <def>
@@ -10,7 +7,7 @@
 // all_of: <def>
 // <def>: (<string> | <one_of> | <all_of>), *
 
-const ShaderList glsl_shader_list = shaders(
+const ShaderList shader_list = shaders(
     prog(
         "primitive.vert", "primitive.frag",
         one_of(

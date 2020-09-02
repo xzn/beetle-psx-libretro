@@ -31,6 +31,8 @@ struct ShaderList
 	std::vector<Program> programs;
 };
 
+extern const ShaderList shader_list;
+
 namespace
 {
 
