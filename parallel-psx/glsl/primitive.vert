@@ -32,7 +32,7 @@ void main()
    gl_Position = vec4((Position.xy + off) / FB_SIZE * 2.0 - 1.0, Position.z, 1.0) * Position.w;
    vColor = Color;
 #ifdef TEXTURED
-   vUV = vec2(UV.xy) + off;
+   vUV = vec2(UV.xy); // + off; this is incorrect since depending on the sign of (u - v) this could be (- off)
    vParam = Param;
    vBaseUV = UV.zw;
    vWindow = ivec4(Window);
