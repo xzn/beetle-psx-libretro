@@ -29,5 +29,27 @@ const ShaderList shader_list = ShaderList{{
                 }}
             }}
         }}
+    },
+    Program{
+        Compute{"resolve.comp"},
+        OneOf{{
+            AllOf{{
+                "SCALED",
+                OneOf{{
+                    "",
+                    "MSAA"
+                }}
+            }},
+            AllOf{{
+                "UNSCALED",
+                OneOfVal{
+                    "SCALE", {
+                    2,
+                    4,
+                    8,
+                    16
+                }}
+            }}
+        }}
     }
 }};
