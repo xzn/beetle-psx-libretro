@@ -1,11 +1,16 @@
 #include "rebuild_shaders.h"
 
+// "#include" directives and macros usage are regex searched,
+// make sure they do not appear in comments.
+
 // ShaderList{{<Program>, *}}
-// Program{Graphic{<std::string file.vert>, <std::string file.frag>}, <Define>}
-// Program{Compute{<std::string file.comp>}, <Define>}
+// Program{Graphic{<std::string "file.vert">, <std::string "file.frag">}, <Define>}
+// Program{Compute{<std::string "file.comp">}, <Define>}
 // OneOf{{<Define>, *}}
 // AllOf{{<Define>, *}}
-// <Define> = <std::string> | <OneOf> | <AllOf>
+// OneOfVal{<std::string>, {<Val>, *}}
+// <Define> = <std::string> | <OneOf> | <AllOf> | <OneOfVal>
+// <Val> = <int> | <std::string>
 
 const ShaderList shader_list = ShaderList{{
     Program{

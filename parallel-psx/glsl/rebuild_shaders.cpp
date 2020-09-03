@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <map>
 #include <optional>
 #include <unordered_set>
@@ -11,8 +12,12 @@
 #include <regex>
 #include <deque>
 
+#include "SPIRV/GlslangToSpv.h"
+#include "glslang/Public/ShaderLang.h"
+
 using namespace std;
 using namespace filesystem;
+using namespace glslang;
 
 // From boost
 template <class T>
@@ -223,7 +228,7 @@ vector<Macros> get_macros_sets_from_defines(Define defines)
     }, defines);
 }
 
-void print_file_and_macros_info(FileName file, Macros ms)
+void print_file_and_macros_info(FileName file, const Macros &ms)
 {
     cerr << file << ": ";
     bool next = false;
@@ -259,6 +264,94 @@ void print_file_and_macros_info(FileName file, Macros ms)
     cerr << endl;
 }
 
+bool iequals(string_view a, string_view b)
+{
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+        [](char a, char b) {
+            return tolower(a) == tolower(b);
+        }
+    );
+}
+
+unordered_map<Macros, string> defines_string_for_macro_set;
+
+string gen_defines_string_from_macro_set(const Macros &ms)
+{
+    ostringstream oss;
+    for (auto &m : ms)
+        visit(overload{
+            [&](auto a)
+            {
+                oss << "#define " << m.first << ' ' << a << '\n';
+            },
+            [&](DefineName a)
+            {
+                oss << "#define " << m.first;
+                if (a.size())
+                    oss << ' ' << a;
+                oss << '\n';
+            }
+        }, m.second);
+    return oss.str();
+}
+
+const string &get_defines_string_for_macro_set(const Macros &ms)
+{
+    auto it = defines_string_for_macro_set.find(ms);
+    if (it == defines_string_for_macro_set.end())
+        return defines_string_for_macro_set[ms] =
+            gen_defines_string_from_macro_set(ms);
+    return it->second;
+}
+
+unordered_map<FileName, TShader::Includer::IncludeResult> include_results_of_files;
+
+struct ShaderIncluder : TShader::Includer
+{
+    virtual IncludeResult *includeLocal(const char *header, const char *include, size_t depth) override
+    {
+        FileName file(include);
+        auto it = include_results_of_files.find(file);
+        if (it == include_results_of_files.end())
+        {
+            auto &c = get_content_of_file(file);
+            auto i = include_results_of_files.emplace(file, IncludeResult{header, c.c_str(), c.length(), nullptr});
+            return &i.first->second;
+        }
+        return &it->second;
+    }
+};
+
+void compile_with_defines(FileName file, const Macros &m)
+{
+    auto e = file.find_last_of('.');
+    if (e == file.npos)
+    {
+        cerr << "No file extension for " << file << endl;
+        exit(1);
+    }
+    EShLanguage stage;
+    auto ext = file.substr(e + 1);
+    if (iequals(ext, "vert"))
+        stage = EShLangVertex;
+    else if (iequals(ext, "frag"))
+        stage = EShLangFragment;
+    else if (iequals(ext, "comp"))
+        stage = EShLangCompute;
+    else
+    {
+        cerr << "Unknown file extension " << ext << " for file " << file << endl;
+        exit(1);
+    }
+    TShader shader(stage);
+    TProgram program;
+    EProfile profile = ECoreProfile;
+    auto messages = EShMessages(EShMsgDefault | EShMsgSpvRules | EShMsgVulkanRules);
+    int default_version = 450;
+    auto &preamble = get_defines_string_for_macro_set(m);
+    shader.setPreamble(preamble.c_str());
+}
+
 void compile_with_defines(FileName file, const vector<Macros> &m)
 {
     for (auto &ms : m)
@@ -268,6 +361,7 @@ void compile_with_defines(FileName file, const vector<Macros> &m)
         if (done)
             continue;
         print_file_and_macros_info(file, ns);
+        compile_with_defines(file, ns);
         done = true;
     }
 }
@@ -320,7 +414,15 @@ void generate_program(const Program &p)
 
 int main()
 {
+    if (!InitializeProcess())
+    {
+        cerr << "Failed to initialize glslang." << endl;
+        exit(1);
+    }
+
     for (auto &p : shader_list.programs)
         generate_program(p);
+
+    FinalizeProcess();
     return 0;
 }
