@@ -18,6 +18,7 @@
 
 using namespace std;
 using namespace filesystem;
+using namespace chrono;
 using namespace glslang;
 using namespace spv;
 
@@ -28,7 +29,7 @@ inline void hash_combine(T &s, T v)
 	s ^= v + 0x9e3779b9 + (s << 6) + (s >> 2);
 }
 
-using Macros = map<DefineName, Val>;
+using Macros = map<DefineName, optional<Val>>;
 template <>
 struct std::hash<Macros>
 {
@@ -37,8 +38,8 @@ struct std::hash<Macros>
 		size_t ret = 0;
 		for (auto &p : m)
 		{
-			hash_combine(ret, hash<DefineName>()(p.first));
-			hash_combine(ret, hash<Val>()(p.second));
+			hash_combine(ret, hash<Macros::key_type>()(p.first));
+			hash_combine(ret, hash<Macros::mapped_type>()(p.second));
 		}
 		return ret;
 	}
@@ -51,6 +52,8 @@ unordered_map<FileName, DefinesPresent> macros_present_in_files;
 using MacrosDone = unordered_map<Macros, bool>;
 unordered_map<FileName, MacrosDone> spirv_done_files;
 unordered_map<FileName, vector<FileName>> included_files;
+unordered_map<FileName, unordered_set<FileName>> included_files_deep;
+unordered_map<FileName, file_time_type> files_write_times;
 
 FileContent read_file_to_string(string_view file)
 {
@@ -107,6 +110,53 @@ const vector<FileName> &get_included_files(FileName file)
     return it->second;
 }
 
+const unordered_set<FileName> &get_included_files_deep(FileName file)
+{
+    auto it = included_files_deep.find(file);
+    if (it == included_files_deep.end())
+    {
+        unordered_set<FileName> ret{{file}};
+        auto &fs = get_included_files(file);
+        for (auto &f : fs)
+        {
+            auto &gs = get_included_files_deep(f);
+            ret.insert(gs.begin(), gs.end());
+        }
+        return included_files_deep[file] = move(ret);
+    }
+    return it->second;
+}
+
+file_time_type get_file_write_time(FileName f)
+{
+    auto it = files_write_times.find(f);
+    if (it == files_write_times.end())
+    {
+        error_code ec;
+        auto t = last_write_time(f, ec);
+        if (ec)
+        {
+            cerr << "Error reading last write time for file " << f << endl;
+            exit(1);
+        }
+        return files_write_times[f] = t;
+    }
+    return it->second;
+}
+
+file_time_type get_latest_file_change_time(FileName f)
+{
+    file_time_type t = file_time_type::min();
+    auto &fs = get_included_files_deep(f);
+    for (auto &f : fs)
+    {
+        auto t2 = get_file_write_time(f);
+        if (t < t2)
+            t = t2;
+    }
+    return t;
+}
+
 bool is_macro_present_in_file(FileName file, DefineName define)
 {
     auto &content = get_content_of_file(file);
@@ -135,19 +185,11 @@ Macros get_macros_present_in_file(FileName file, Macros macros)
 Macros get_macros_present_in_included_files(FileName file, Macros macros)
 {
     Macros ret;
-    deque<FileName> files{{file}};
-    unordered_set<FileName> seen;
-    while (files.size())
+    auto &fs = get_included_files_deep(file);
+    for (auto &f : fs)
     {
-        auto f = move(files.front());
-        files.pop_front();
         auto m = get_macros_present_in_file(f, macros);
         ret.insert(m.begin(), m.end());
-        seen.insert(f);
-        auto &fs = get_included_files(f);
-        for (auto &g : fs)
-            if (seen.insert(g).second)
-                files.push_back(g);
     }
     return ret;
 }
@@ -196,7 +238,7 @@ vector<Macros> get_macros_sets_from_defines(Define defines)
         {
             return vector<Macros>{{
                 {{
-                    v, ""
+                    v, {}
                 }}
             }};
         },
@@ -237,30 +279,10 @@ void print_file_and_macros_info(FileName file, const Macros &ms)
     for (auto &m : ms)
     {
         if (next)
-            cerr << " ";
-        visit(overload{
-            [&](auto a)
-            {
-                cerr << m.first << "=" << a;
-            },
-            [&](DefineName a)
-            {
-                if (a.size())
-                {
-                    cerr << m.first << "=";
-                    regex define_regex(R"(\s)");
-                    auto s = string(a);
-                    if (regex_search(s, define_regex))
-                    {
-                        regex escape_regex(R"(\\|")");
-                        s = '"' + regex_replace(s, escape_regex, "\\$0") + '"';
-                    }
-                    cerr << s;
-                }
-                else
-                    cerr << m.first;
-            },
-        }, m.second);
+            cerr << ' ';
+        cerr << m.first;
+        if (m.second)
+            cerr << '=' << *m.second;
         next = true;
     }
     cerr << endl;
@@ -282,19 +304,12 @@ string gen_defines_string_from_macro_set(const Macros &ms)
     ostringstream oss;
     oss << "#extension GL_GOOGLE_include_directive : enable" << endl;
     for (auto &m : ms)
-        visit(overload{
-            [&](auto a)
-            {
-                oss << "#define " << m.first << ' ' << a << '\n';
-            },
-            [&](DefineName a)
-            {
-                oss << "#define " << m.first;
-                if (a.size())
-                    oss << ' ' << a;
-                oss << '\n';
-            }
-        }, m.second);
+    {
+        oss << "#define " << m.first;
+        if (m.second)
+            oss << ' ' << *m.second;
+        oss << '\n';
+    }
     return oss.str();
 }
 
@@ -327,7 +342,8 @@ struct ShaderIncluder : TShader::Includer
     virtual void releaseInclude(IncludeResult *) override {}
 };
 
-void compile_with_defines(FileName file, const Macros &m)
+using SpvString = std::vector<unsigned int>;
+SpvString compile_with_defines(FileName file, const Macros &m, bool print_info)
 {
     auto e = file.find_last_of('.');
     if (e == file.npos)
@@ -355,6 +371,8 @@ void compile_with_defines(FileName file, const Macros &m)
     auto messages = EShMessages(EShMsgDefault | EShMsgSpvRules | EShMsgVulkanRules);
     int default_version = 450;
     auto &preamble = get_defines_string_for_macro_set(m);
+    if (print_info)
+        cerr << preamble << endl;
     shader.setPreamble(preamble.c_str());
     auto &c = get_content_of_file(file);
     const char* src = c.data();
@@ -382,24 +400,64 @@ void compile_with_defines(FileName file, const Macros &m)
     if (!intermediate)
         on_error("Failed to generate SPIR-V");
 
-    std::vector<unsigned int> out;
+    SpvString out;
     SpvBuildLogger logger;
     GlslangToSpv(*intermediate, out, &logger);
     auto logger_messages = logger.getAllMessages();
     if (logger_messages.size())
         cerr << logger_messages << endl;
+    return out;
 }
 
-void compile_with_defines(FileName file, const vector<Macros> &m)
+// From cppreference
+string tolower(string s) {
+    std::transform(s.begin(), s.end(), s.begin(), 
+        [](unsigned char c) { return tolower(c); }
+    );
+    return s;
+}
+
+string get_file_with_defines_name(FileName file, Macros ms)
 {
+    ostringstream oss;
+    auto d = file.find_last_of('.');
+    oss << file.substr(0, d);
+    for (auto &m : ms)
+    {
+        oss << '.';
+        oss << tolower(string(m.first));
+        if (m.second)
+            oss << '_' << *m.second;
+    }
+    oss << file.substr(d) << ".inc";
+    return oss.str();
+}
+
+// From Stack Overflow
+template <typename T>
+time_t to_time_t(T t)
+{
+    auto s = time_point_cast<system_clock::duration>(t - T::clock::now() + system_clock::now());
+    return system_clock::to_time_t(s);
+}
+
+void compile_with_defines(FileName file, const vector<Macros> &m, bool print_info)
+{
+    auto t = get_latest_file_change_time(file);
+    if (print_info)
+    {
+        auto t2 = to_time_t(t);
+        cerr << file << " last changed " << put_time(localtime(&t2), "%Y-%m-%d %H:%M:%S") << endl;
+    }
     for (auto &ms : m)
     {
         auto ns = get_macros_present_in_included_files(file, ms);
         auto &done = get_spirv_done_for_file(file, ns);
         if (done)
             continue;
-        print_file_and_macros_info(file, ns);
-        compile_with_defines(file, ns);
+        if (print_info)
+            print_file_and_macros_info(file, ns);
+        auto spv = compile_with_defines(file, ns, print_info);
         done = true;
     }
 }
@@ -447,7 +505,7 @@ void generate_program(const Program &p)
     auto ms = get_macros_sets_from_defines(p.defines);
     ms = filter_zeros_defines(move(ms));
     for (auto &f : p.files)
-        compile_with_defines(f, ms);
+        compile_with_defines(f, ms, false);
 }
 
 int main()
