@@ -2,6 +2,7 @@
 *.d
 *.so
 *.dll
+*.exe
 *.dylib
 *.lib
 *.pdb
