@@ -300,22 +300,17 @@ vector<Macros> filter_zeros_defines(vector<Macros> m)
     return ret;
 }
 
-int generate_program(const Program &p)
+void generate_program(const Program &p)
 {
     auto ms = get_macros_sets_from_defines(p.defines);
     ms = filter_zeros_defines(move(ms));
-	for (auto &f : p.files)
+    for (auto &f : p.files)
         compile_with_defines(f, ms);
-	return 0;
 }
 
 int main()
 {
-	for (auto &p : shader_list.programs)
-	{
-		int ret = generate_program(p);
-		if (ret)
-			return ret;
-	}
-	return 0;
+    for (auto &p : shader_list.programs)
+        generate_program(p);
+    return 0;
 }
