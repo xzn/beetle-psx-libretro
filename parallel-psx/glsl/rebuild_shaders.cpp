@@ -239,7 +239,17 @@ void print_file_and_macros_info(FileName file, Macros ms)
             [&](DefineName a)
             {
                 if (a.size())
-                    cerr << m.first << "=" << a;
+                {
+                    cerr << m.first << "=";
+                    regex define_regex(R"(\s)");
+                    auto s = string(a);
+                    if (regex_search(s, define_regex))
+                    {
+                        regex escape_regex(R"(\\|")");
+                        s = '"' + regex_replace(s, escape_regex, "\\$0") + '"';
+                    }
+                    cerr << s;
+                }
                 else
                     cerr << m.first;
             },
