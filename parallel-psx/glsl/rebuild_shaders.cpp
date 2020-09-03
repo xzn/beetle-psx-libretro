@@ -13,11 +13,13 @@
 #include <deque>
 
 #include "SPIRV/GlslangToSpv.h"
+#include "StandAlone/ResourceLimits.h"
 #include "glslang/Public/ShaderLang.h"
 
 using namespace std;
 using namespace filesystem;
 using namespace glslang;
+using namespace spv;
 
 // From boost
 template <class T>
@@ -278,6 +280,7 @@ unordered_map<Macros, string> defines_string_for_macro_set;
 string gen_defines_string_from_macro_set(const Macros &ms)
 {
     ostringstream oss;
+    oss << "#extension GL_GOOGLE_include_directive : enable" << endl;
     for (auto &m : ms)
         visit(overload{
             [&](auto a)
@@ -310,16 +313,18 @@ struct ShaderIncluder : TShader::Includer
 {
     virtual IncludeResult *includeLocal(const char *header, const char *include, size_t depth) override
     {
-        FileName file(include);
+        FileName file(header);
         auto it = include_results_of_files.find(file);
         if (it == include_results_of_files.end())
         {
             auto &c = get_content_of_file(file);
-            auto i = include_results_of_files.emplace(file, IncludeResult{header, c.c_str(), c.length(), nullptr});
+            auto i = include_results_of_files.emplace(file, IncludeResult{header, c.data(), c.length(), nullptr});
             return &i.first->second;
         }
         return &it->second;
     }
+
+    virtual void releaseInclude(IncludeResult *) override {}
 };
 
 void compile_with_defines(FileName file, const Macros &m)
@@ -345,11 +350,44 @@ void compile_with_defines(FileName file, const Macros &m)
     }
     TShader shader(stage);
     TProgram program;
+    ShaderIncluder includer;
     EProfile profile = ECoreProfile;
     auto messages = EShMessages(EShMsgDefault | EShMsgSpvRules | EShMsgVulkanRules);
     int default_version = 450;
     auto &preamble = get_defines_string_for_macro_set(m);
     shader.setPreamble(preamble.c_str());
+    auto &c = get_content_of_file(file);
+    const char* src = c.data();
+    int src_len = c.length();
+    shader.setStringsWithLengths(&src, &src_len, 1);
+
+    auto on_error = [&](const char* msg) {
+        cerr << file << ": " << msg << endl;
+        cerr << "Shader info log:" << endl;
+        cerr << shader.getInfoLog() << endl;
+        cerr << shader.getInfoDebugLog() << endl;
+        cerr << "Program info log:" << endl;
+        cerr << program.getInfoLog() << endl;
+        cerr << program.getInfoDebugLog() << endl;
+        exit(1);
+    };
+    if (!shader.parse(&DefaultTBuiltInResource, default_version, profile, false, true, messages, includer))
+        on_error("Failed to parse shader");
+
+    program.addShader(&shader);
+    if (!program.link(messages))
+        on_error("Failed to link program");
+
+    auto *intermediate = program.getIntermediate(stage);
+    if (!intermediate)
+        on_error("Failed to generate SPIR-V");
+
+    std::vector<unsigned int> out;
+    SpvBuildLogger logger;
+    GlslangToSpv(*intermediate, out, &logger);
+    auto logger_messages = logger.getAllMessages();
+    if (logger_messages.size())
+        cerr << logger_messages << endl;
 }
 
 void compile_with_defines(FileName file, const vector<Macros> &m)

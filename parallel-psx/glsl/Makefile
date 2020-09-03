@@ -26,6 +26,7 @@ GLSLANG_SOURCES_CXX = \
 	$(wildcard glslang/glslang/GenericCodeGen/*.cpp) \
 	$(wildcard glslang/glslang/MachineIndependent/*.cpp) \
 	$(wildcard glslang/glslang/MachineIndependent/preprocessor/*.cpp) \
+	glslang/StandAlone/ResourceLimits.cpp  \
 	glslang/glslang/OSDependent/$(GLSLANG_PLATFORM)/ossource.cpp
 
 SOURCES_CXX = $(wildcard *.cpp)
