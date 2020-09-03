@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <regex>
+#include <deque>
 
 using namespace std;
 namespace fs = filesystem;
@@ -45,10 +46,11 @@ using DefinesPresent = unordered_map<DefineName, bool>;
 unordered_map<FileName, DefinesPresent> macros_present_in_files;
 using MacrosDone = unordered_map<Macros, bool>;
 unordered_map<FileName, MacrosDone> spirv_done_files;
+unordered_map<FileName, vector<FileName>> included_files;
 
 FileContent read_file_to_string(string_view file)
 {
-	ifstream f(file.data(), ios::ate | ios::binary);
+	ifstream f(string(file), ios::ate | ios::binary);
 	if (!f)
 		return {};
 	auto size = f.tellg();
@@ -81,10 +83,30 @@ const FileContent &get_content_of_file(FileName file)
     return it->second;
 }
 
+const vector<FileName> &get_included_files(FileName file)
+{
+    auto it = included_files.find(file);
+    if (it == included_files.end())
+    {
+        vector<FileName> ret;
+        auto &content = get_content_of_file(file);
+        FileContent::const_iterator fi = content.cbegin();
+        regex include_regex(R"regex(#include\s+"(.+)")regex");
+        smatch res;
+        while (regex_search(fi, content.cend(), res, include_regex))
+        {
+            ret.push_back({&*res[1].first, (FileName::size_type)res[1].length()});
+            fi = res.suffix().first;
+        }
+        return included_files[file] = move(ret);
+    }
+    return it->second;
+}
+
 bool is_macro_present_in_file(FileName file, DefineName define)
 {
     auto &content = get_content_of_file(file);
-    regex ident_regex(string("[^a-zA-Z_]") + define.data() + "[^a-zA-Z0-9_]");
+    regex ident_regex("[^a-zA-Z_]" + string(define) + "[^a-zA-Z0-9_]");
     return regex_search(content, ident_regex);
 }
 
@@ -103,6 +125,26 @@ Macros get_macros_present_in_file(FileName file, Macros macros)
     for (auto &m : macros)
         if (get_macro_present_in_file(file, m.first))
             ret.insert(m);
+    return ret;
+}
+
+Macros get_macros_present_in_included_files(FileName file, Macros macros)
+{
+    Macros ret;
+    deque<FileName> files{{file}};
+    unordered_set<FileName> seen;
+    while (files.size())
+    {
+        auto f = move(files.front());
+        files.pop_front();
+        auto m = get_macros_present_in_file(f, macros);
+        ret.insert(m.begin(), m.end());
+        seen.insert(f);
+        auto &fs = get_included_files(f);
+        for (auto &g : fs)
+            if (seen.insert(g).second)
+                files.push_back(g);
+    }
     return ret;
 }
 
@@ -214,7 +256,7 @@ void compile_with_defines(FileName file, const vector<Macros> &m)
 {
     for (auto &ms : m)
     {
-        auto ns = get_macros_present_in_file(file, ms);
+        auto ns = get_macros_present_in_included_files(file, ms);
         auto &done = get_spirv_done_for_file(file, ns);
         if (done)
             continue;
