@@ -164,10 +164,13 @@ void Finalise_UVLimits(PS_GPU *gpu)
 		// If du/dx or dv/dx are negative, we probably need to invert this though ...
 		if (rsx_intf_is_type() != RSX_VULKAN || psx_gpu_upscale_shift_common != 0)
 		{
-			if (max_u > min_u)
-				max_u--;
-			if (max_v > min_v)
-				max_v--;
+			// Will be sampled for 3D polygons though
+			// In any case if we don't use filters for sprites there's no issue. Otherwise need proper fix.
+
+			// if (max_u > min_u)
+			// 	max_u--;
+			// if (max_v > min_v)
+			// 	max_v--;
 		}
 
 		// If there's no wrapping, we can prewrap and avoid fallback.
