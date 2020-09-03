@@ -14,11 +14,7 @@ const ShaderList shader_list = ShaderList{{
             "",
             AllOf{{
                 "TEXTURED",
-                OneOf{{
-                    "OPAQUE",
-                    "SEMI_TRANS_OPAQUE",
-                    "SEMI_TRANS"
-                }},
+                OneOf{{ "OPAQUE", "SEMI_TRANS_OPAQUE", "SEMI_TRANS" }},
                 OneOf{{
                     "",
                     "FILTER_XBR",
@@ -33,23 +29,8 @@ const ShaderList shader_list = ShaderList{{
     Program{
         Compute{"resolve.comp"},
         OneOf{{
-            AllOf{{
-                "SCALED",
-                OneOf{{
-                    "",
-                    "MSAA"
-                }}
-            }},
-            AllOf{{
-                "UNSCALED",
-                OneOfVal{
-                    "SCALE", {
-                    2,
-                    4,
-                    8,
-                    16
-                }}
-            }}
+            AllOf{{ "SCALED", OneOf{{ "", "MSAA" }} }},
+            AllOf{{ "UNSCALED", OneOfVal{ "SCALE", { 2, 4, 8, 16 }} }}
         }}
     }
 }};
