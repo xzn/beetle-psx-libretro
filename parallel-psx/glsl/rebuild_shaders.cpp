@@ -187,20 +187,26 @@ vector<Macros> get_macros_sets_from_defines(Define defines)
 void print_file_and_macros_info(FileName file, Macros ms)
 {
     cerr << file << ": ";
+    bool next = false;
     for (auto &m : ms)
+    {
+        if (next)
+            cerr << ", ";
         visit(overload{
             [&](auto a)
             {
-                cerr << m.first << " = " << a << ", ";
+                cerr << m.first << " = " << a;
             },
             [&](string_view a)
             {
                 if (a.size())
-                    cerr << m.first << " = " << a << ", ";
+                    cerr << m.first << " = " << a;
                 else
-                    cerr << m.first << ", ";
+                    cerr << m.first;
             },
         }, m.second);
+        next = true;
+    }
     cerr << endl;
 }
 
