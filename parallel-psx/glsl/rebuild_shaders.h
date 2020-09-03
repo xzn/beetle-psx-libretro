@@ -15,7 +15,7 @@ using OneOfValPtr = std::shared_ptr<OneOfVal>;
 using FileName = std::string_view;
 using DefineName = std::string_view;
 using Define = std::variant<DefineName, OneOfPtr, AllOfPtr, OneOfValPtr>;
-using Val = std::variant<int, float, DefineName>;
+using Val = std::variant<int, DefineName>;
 
 struct Program
 {

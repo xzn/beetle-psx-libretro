@@ -62,4 +62,17 @@ const ShaderList shader_list = ShaderList{{
             AllOf{{ "UNSCALED", OneOf{{ "", "MASKED" }} }}
         }},    
     },
+    Program{
+        {"mipmap.vert"},
+        OneOf{{ "", "SHIFT_QUAD" }}
+    },
+    Program{
+        {"mipmap_resolve.frag"},
+        OneOf{{ "", "DITHER" }}
+    },
+    Program{
+        {"mipmap_energy.frag"},
+        OneOf{{ "", "FIRST_PASS", }}
+    },
+    Program{{"mipmap_blur.frag"}}
 }};

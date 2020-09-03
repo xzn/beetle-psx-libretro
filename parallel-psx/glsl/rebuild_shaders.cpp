@@ -12,7 +12,7 @@
 #include <deque>
 
 using namespace std;
-namespace fs = filesystem;
+using namespace filesystem;
 
 // From boost
 template <class T>
@@ -230,16 +230,16 @@ void print_file_and_macros_info(FileName file, Macros ms)
     for (auto &m : ms)
     {
         if (next)
-            cerr << ", ";
+            cerr << " ";
         visit(overload{
             [&](auto a)
             {
-                cerr << m.first << " = " << a;
+                cerr << m.first << "=" << a;
             },
             [&](DefineName a)
             {
                 if (a.size())
-                    cerr << m.first << " = " << a;
+                    cerr << m.first << "=" << a;
                 else
                     cerr << m.first;
             },
