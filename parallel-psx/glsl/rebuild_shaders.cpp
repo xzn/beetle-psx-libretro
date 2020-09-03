@@ -14,9 +14,6 @@
 using namespace std;
 namespace fs = filesystem;
 
-using FileName = string_view;
-using DefineName = string_view;
-
 // From boost
 template <class T>
 inline void hash_combine(T &s, T v)
@@ -188,7 +185,7 @@ vector<Macros> get_macros_sets_combinations(vector<vector<Macros>> c)
 vector<Macros> get_macros_sets_from_defines(Define defines)
 {
     return visit(overload{
-        [](string_view v)
+        [](DefineName v)
         {
             return vector<Macros>{{
                 {{
@@ -239,7 +236,7 @@ void print_file_and_macros_info(FileName file, Macros ms)
             {
                 cerr << m.first << " = " << a;
             },
-            [&](string_view a)
+            [&](DefineName a)
             {
                 if (a.size())
                     cerr << m.first << " = " << a;
@@ -307,17 +304,8 @@ int generate_program(const Program &p)
 {
     auto ms = get_macros_sets_from_defines(p.defines);
     ms = filter_zeros_defines(move(ms));
-	visit(overload{
-        [&](Graphic f)
-        {
-            compile_with_defines(f.first, ms);
-            compile_with_defines(f.second, ms);
-        },
-        [&](Compute f)
-        {
-            compile_with_defines(f, ms);
-        },
-    }, p.files);
+	for (auto &f : p.files)
+        compile_with_defines(f, ms);
 	return 0;
 }
 
