@@ -12,10 +12,10 @@ using OneOfPtr = std::shared_ptr<OneOf>;
 using AllOfPtr = std::shared_ptr<AllOf>;
 using OneOfValPtr = std::shared_ptr<OneOfVal>;
 
-using Define = std::variant<std::string, OneOfPtr, AllOfPtr, OneOfValPtr>;
-using Val = std::variant<int, float, std::string>;
-using Graphic = std::pair<std::string, std::string>;
-using Compute = std::string;
+using Define = std::variant<std::string_view, OneOfPtr, AllOfPtr, OneOfValPtr>;
+using Val = std::variant<int, float, std::string_view>;
+using Graphic = std::pair<std::string_view, std::string_view>;
+using Compute = std::string_view;
 
 struct Program
 {
@@ -40,7 +40,7 @@ struct AllOf
 };
 struct OneOfVal
 {
-	std::string name;
+	std::string_view name;
 	std::vector<Val> vals;
 	operator Define()
 	{

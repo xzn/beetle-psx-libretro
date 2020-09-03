@@ -6,7 +6,6 @@
 #include <iostream>
 #include <map>
 #include <optional>
-#include <string_view>
 #include <unordered_set>
 #include <unordered_map>
 #include <regex>
@@ -14,22 +13,8 @@
 using namespace std;
 namespace fs = filesystem;
 
-string read_file_to_string(string path)
-{
-	ifstream f(path, ios::ate | ios::binary);
-	if (!f)
-		return {};
-	auto size = f.tellg();
-	string ret(size, 0);
-	f.seekg(0);
-	f.read(ret.data(), size);
-	size = f.gcount();
-	ret.resize(size);
-	return ret;
-}
-
-using FileName = string;
-using DefineName = string;
+using FileName = string_view;
+using DefineName = string_view;
 
 // From boost
 template <class T>
@@ -61,6 +46,20 @@ unordered_map<FileName, DefinesPresent> macros_present_in_files;
 using MacrosDone = unordered_map<Macros, bool>;
 unordered_map<FileName, MacrosDone> spirv_done_files;
 
+FileContent read_file_to_string(string_view file)
+{
+	ifstream f(file.data(), ios::ate | ios::binary);
+	if (!f)
+		return {};
+	auto size = f.tellg();
+	string ret(size, 0);
+	f.seekg(0);
+	f.read(ret.data(), size);
+	size = f.gcount();
+	ret.resize(size);
+	return ret;
+}
+
 bool &get_spirv_done_for_file(FileName file, Macros ms)
 {
     return spirv_done_files[file][ms];
@@ -85,7 +84,7 @@ const FileContent &get_content_of_file(FileName file)
 bool is_macro_present_in_file(FileName file, DefineName define)
 {
     auto &content = get_content_of_file(file);
-    regex ident_regex("[^a-zA-Z_]" + define + "[^a-zA-Z0-9_]");
+    regex ident_regex(string("[^a-zA-Z_]") + define.data() + "[^a-zA-Z0-9_]");
     return regex_search(content, ident_regex);
 }
 
@@ -147,7 +146,7 @@ vector<Macros> get_macros_sets_combinations(vector<vector<Macros>> c)
 vector<Macros> get_macros_sets_from_defines(Define defines)
 {
     return visit(overload{
-        [](string v)
+        [](string_view v)
         {
             return vector<Macros>{{
                 {{
@@ -194,7 +193,7 @@ void print_file_and_macros_info(FileName file, Macros ms)
             {
                 cerr << m.first << " = " << a << ", ";
             },
-            [&](string a)
+            [&](string_view a)
             {
                 if (a.size())
                     cerr << m.first << " = " << a << ", ";
@@ -247,6 +246,8 @@ vector<Macros> filter_zeros_defines(vector<Macros> m)
                 return false;
             if (i->first != j->first)
                 return i->first < j->first;
+            if (i->second != j->second)
+                return i->second < j->second;
             ++i;
             ++j;
         }
