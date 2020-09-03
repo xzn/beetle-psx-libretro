@@ -647,8 +647,8 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
       for (unsigned v = 0; v < 3; v++)
       {
          if (
-            fabs(vertices[v].precise[0] - (float)vertices[v].x) > 2. ||
-            fabs(vertices[v].precise[1] - (float)vertices[v].y) > 2.
+            fabs(vertices[v].precise[0] - (float)vertices[v].x) > 4.0 ||
+            fabs(vertices[v].precise[1] - (float)vertices[v].y) > 4.0
          )
          {
             skip_pgxp = true;
