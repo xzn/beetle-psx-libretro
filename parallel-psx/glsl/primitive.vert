@@ -2,12 +2,12 @@
 
 layout(location = 0) in vec4 Position;
 layout(location = 1) in vec4 Color;
+layout(location = 6) in mediump uint Scale;
 #ifdef TEXTURED
 layout(location = 2) in mediump uvec4 Window;
 layout(location = 3) in mediump ivec3 Param;
 layout(location = 4) in ivec4 UV;
 layout(location = 5) in mediump uvec4 UVRange;
-layout(location = 6) in mediump uint Scale;
 
 layout(location = 1) out mediump vec2 vUV;
 layout(location = 2) flat out mediump ivec3 vParam;
@@ -23,12 +23,9 @@ const vec2 FB_SIZE = vec2(1024, 512);
 
 void main()
 {
-#ifdef TEXTURED
    vec2 off = vec2(0.5, 0.5) * float(Scale == 1);
+#ifdef TEXTURED
    vec2 uvoff = vec2(0.5, 0.5) * float(Scale == 1 || Position.w != 1.0);
-#else
-   vec2 off = vec2(0, 0); // TODO Scale for flat
-   vec2 uvoff = vec2(0.5, 0.5) * float(Position.w != 1.0);
 #endif
    // From center of pixel so 0.5..1023.5, 0.5..511.5, then divide and adjust to screen coord
    gl_Position = vec4((Position.xy + off) / FB_SIZE * 2.0 - 1.0, Position.z, 1.0) * Position.w;
