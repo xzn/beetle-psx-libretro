@@ -75,4 +75,4 @@ clean:
 	rm -f $(DEPS)
 	rm -f $(TARGET)
 
-.PHONY: clean
+.PHONY: clean all
