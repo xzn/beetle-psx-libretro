@@ -14,7 +14,6 @@ layout(location = 2) flat out mediump ivec3 vParam;
 layout(location = 3) flat out mediump ivec2 vBaseUV;
 layout(location = 4) flat out mediump ivec4 vWindow;
 layout(location = 5) flat out mediump ivec4 vTexLimits;
-layout(location = 6) flat out mediump int vScale;
 #endif
 layout(location = 0) out mediump vec4 vColor;
 
@@ -37,6 +36,5 @@ void main()
    vBaseUV = UV.zw;
    vWindow = ivec4(Window);
    vTexLimits = ivec4(UVRange);
-   vScale = int(Scale);
 #endif
 }

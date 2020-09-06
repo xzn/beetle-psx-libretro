@@ -6,7 +6,6 @@ layout(location = 2) flat in mediump ivec3 vParam;
 layout(location = 3) flat in mediump ivec2 vBaseUV;
 layout(location = 4) flat in mediump ivec4 vWindow;
 layout(location = 5) flat in mediump ivec4 vTexLimits;
-layout(location = 6) flat in mediump int vScale;
 layout(set = 0, binding = 0) uniform mediump sampler2D uFramebuffer;
 
 vec2 clamp_coord(vec2 coord)
@@ -17,6 +16,7 @@ vec2 clamp_coord(vec2 coord)
 // Nearest neighbor
 vec4 sample_vram_atlas(vec2 uvv)
 {
+    const vec2 FB_SIZE = vec2(1024, 512);
     ivec3 params = vParam;
     int shift = params.z & 3;
 
@@ -30,7 +30,7 @@ vec4 sample_vram_atlas(vec2 uvv)
         off.x >>= shift;
         // off = ivec2(mod((vBaseUV + off), vec2(1024, 512)));
         off += vBaseUV;
-        int value = int(pack_abgr1555(texelFetch(uFramebuffer, off * vScale, 0)));
+        int value = int(pack_abgr1555(textureLod(uFramebuffer, (off + vec2(0.5, 0.5)) / FB_SIZE, 0)));
         int mask = (1 << bpp) - 1;
         value = (value >> align) & mask;
         params.x += value;
@@ -40,7 +40,7 @@ vec4 sample_vram_atlas(vec2 uvv)
         // coord = mod((vBaseUV + uvv), vec2(1024, 512));
         coord = vBaseUV + uvv;
 
-    return texelFetch(uFramebuffer, ivec2(coord * vScale), 0);
+    return textureLod(uFramebuffer, (coord + vec2(0.5, 0.5)) / FB_SIZE, 0);
 }
 
 // Take a normalized color and convert it into a 16bit 1555 ABGR
