@@ -616,7 +616,7 @@ static void Command_DrawPolygon(PS_GPU *gpu, const uint32_t *cb)
          vertices[v].precise[1] = ((vert.y + (float)gpu->OffsY) * UPSCALE(gpu));
          vertices[v].precise[2] = vert.w;
 
-         if (!vert.valid_w)
+         if (!vert.valid_w || vert.w <= 0)
             invalidW = true;
 
       } else {
