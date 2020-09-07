@@ -1808,11 +1808,38 @@ void Renderer::adjust_attribs(Vertex *vertices, unsigned count)
 			off_v = off_one;
 	}
 
+	float max_x = 0.0f;
+	float max_y = 0.0f;
+	float min_x = float(FB_WIDTH);
+	float min_y = float(FB_HEIGHT);
+
+	float max_u = 0.0f;
+	float max_v = 0.0f;
+	float min_u = float(FB_WIDTH);
+	float min_v = float(FB_HEIGHT);
+
+	for (unsigned i = 0; i < count; i++)
+	{
+		float tmp_x = vertices[i].x;
+		float tmp_y = vertices[i].y;
+		max_x = max(max_x, tmp_x);
+		max_y = max(max_y, tmp_y);
+		min_x = min(min_x, tmp_x);
+		min_y = min(min_y, tmp_y);
+
+		float tmp_u = vertices[i].u;
+		float tmp_v = vertices[i].v;
+		max_u = max(max_u, tmp_u);
+		max_v = max(max_v, tmp_v);
+		min_u = min(min_u, tmp_u);
+		min_v = min(min_v, tmp_v);
+	}
+
 	for (int i = 0; i < count; ++i)
 	{
-		if (off_u > 0)
+		if (off_u > 0 && (vertices[i].u != min_u || (max_u - min_u) >= (max_x - min_x))) // off by one hack for Valkyrie Profile
 			vertices[i].u += off_u;
-		if (off_v > 0)
+		if (off_v > 0 && (vertices[i].v != min_v || (max_v - min_v) >= (max_y - min_y)))
 			vertices[i].v += off_v;
 	}
 }
