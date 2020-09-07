@@ -1736,7 +1736,88 @@ HdTextureHandle Renderer::get_hd_texture_index(const Rect &vram_rect, bool &fast
 	}
 }
 
-void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsigned count, HdTextureHandle &hd_texture_index, bool &poly_w1)
+void Renderer::adjust_attribs(Vertex *vertices, unsigned count)
+{
+	if (scaling == 1)
+		return;
+
+	float off_u = 0.0;
+	float off_v = 0.0;
+	float off_one = 1.0;
+
+	// It might be faster to do more direct checking here, but the code below handles primitives in any order
+	// and orientation, and is far more SIMD-friendly if needed.
+	float abx = vertices[1].x - vertices[0].x;
+	float aby = vertices[1].y - vertices[0].y;
+	float bcx = vertices[2].x - vertices[1].x;
+	float bcy = vertices[2].y - vertices[1].y;
+	float cax = vertices[0].x - vertices[2].x;
+	float cay = vertices[0].y - vertices[2].y;
+
+	// Compute static derivatives, just assume W is uniform across the primitive
+	// and that the plane equation remains the same across the quad.
+	float dudx = -aby * float(vertices[2].u) - bcy * float(vertices[0].u) - cay * float(vertices[1].u);
+	float dvdx = -aby * float(vertices[2].v) - bcy * float(vertices[0].v) - cay * float(vertices[1].v);
+	float dudy = +abx * float(vertices[2].u) + bcx * float(vertices[0].u) + cax * float(vertices[1].u);
+	float dvdy = +abx * float(vertices[2].v) + bcx * float(vertices[0].v) + cax * float(vertices[1].v);
+	float area = bcx * cay - bcy * cax;
+
+	// iCB: Detect and reject any triangles with 0 size texture area
+	float texArea = (vertices[1].u - vertices[0].u) * (vertices[2].v - vertices[0].v) - (vertices[2].u - vertices[0].u) * (vertices[1].v - vertices[0].v);
+
+	// Leverage PGXP to further avoid 3D polygons that just happen to align this way after projection
+	bool is3D = ((vertices[0].w != vertices[1].w) || (vertices[1].w != vertices[2].w));
+	
+	// Shouldn't matter as degenerate primitives will be culled anyways.
+	if ((area != 0.0f) && (texArea != 0.0f) && !is3D)
+	{
+		float inv_area = 1.0f / area;
+		dudx *= inv_area;
+		dudy *= inv_area;
+		dvdx *= inv_area;
+		dvdy *= inv_area;
+
+		bool neg_dudx = dudx < 0.0f;
+		bool neg_dudy = dudy < 0.0f;
+		bool neg_dvdx = dvdx < 0.0f;
+		bool neg_dvdy = dvdy < 0.0f;
+		bool zero_dudx = dudx == 0.0f;
+		bool zero_dudy = dudy == 0.0f;
+		bool zero_dvdx = dvdx == 0.0f;
+		bool zero_dvdy = dvdy == 0.0f;
+
+		// If we have negative dU or dV in any direction, increment the U or V to work properly with nearest-neighbor in this impl.
+		// If we don't have 1:1 pixel correspondence, this creates a slight "shift" in the sprite, but we guarantee that we don't sample garbage at least.
+		// Overall, this is kinda hacky because there can be legitimate, rare cases where 3D meshes hit this scenario, and a single texel offset can pop in, but
+		// this is way better than having borked 2D overall.
+		// TODO: Try to figure out if this can be generalized.
+		//
+		// TODO: If perf becomes an issue, we can probably SIMD the 8 comparisons above,
+		// create an 8-bit code, and use a LUT to get the offsets.
+		// Case 1: U is decreasing in X, but no change in Y.
+		// Case 2: U is decreasing in Y, but no change in X.
+		// Case 3: V is decreasing in X, but no change in Y.
+		// Case 4: V is decreasing in Y, but no change in X.
+		if (neg_dudx && zero_dudy)
+			off_u = off_one;
+		else if (neg_dudy && zero_dudx)
+			off_u = off_one;
+		if (neg_dvdx && zero_dvdy)
+			off_v = off_one;
+		else if (neg_dvdy && zero_dvdx)
+			off_v = off_one;
+	}
+
+	for (int i = 0; i < count; ++i)
+	{
+		if (off_u > 0)
+			vertices[i].u += off_u;
+		if (off_v > 0)
+			vertices[i].v += off_v;
+	}
+}
+
+void Renderer::build_attribs(BufferVertex *output, Vertex *vertices, unsigned count, HdTextureHandle &hd_texture_index, bool &poly_w1)
 {
 	unsigned shift;
 	switch (render_state.texture_mode)
@@ -1756,6 +1837,8 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 
 	if (render_state.texture_mode != TextureMode::None)
 	{
+		adjust_attribs(vertices, count);
+
 		if (render_state.texture_window.mask_x == 0xffu && render_state.texture_window.mask_y == 0xffu)
 		{
 			unsigned min_u = render_state.UVLimits.min_u;
@@ -1876,6 +1959,10 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 			z,
 			vertices[i].w,
 			vertices[i].color & 0xffffffu,
+			float(vertices[i].u),
+			float(vertices[i].v),
+			float(render_state.texture_offset_x),
+			float(render_state.texture_offset_y),
 			render_state.texture_window,
 			int16_t(render_state.palette_offset_x),
 			int16_t(render_state.palette_offset_y),
@@ -1884,10 +1971,6 @@ void Renderer::build_attribs(BufferVertex *output, const Vertex *vertices, unsig
 #else
 			param,
 #endif
-			int16_t(vertices[i].u),
-			int16_t(vertices[i].v),
-			int16_t(render_state.texture_offset_x),
-			int16_t(render_state.texture_offset_y),
 			render_state.UVLimits.min_u,
 			render_state.UVLimits.min_v,
 			render_state.UVLimits.max_u,
@@ -2095,7 +2178,7 @@ void Renderer::draw_line(const Vertex *vertices)
 	draw_quad(vert);
 }
 
-void Renderer::draw_triangle(const Vertex *vertices)
+void Renderer::draw_triangle(Vertex *vertices)
 {
 	if (!render_state.draw_rect.width || !render_state.draw_rect.height)
 		return;
@@ -2135,7 +2218,7 @@ void Renderer::draw_triangle(const Vertex *vertices)
 	}
 }
 
-void Renderer::draw_quad(const Vertex *vertices)
+void Renderer::draw_quad(Vertex *vertices)
 {
 	if (!render_state.draw_rect.width || !render_state.draw_rect.height)
 		return;
@@ -2479,7 +2562,7 @@ void Renderer::render_semi_transparent_primitives()
 	cmd->set_vertex_attrib(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(BufferVertex, color));
 	cmd->set_vertex_attrib(2, 0, VK_FORMAT_R8G8B8A8_UINT, offsetof(BufferVertex, window));
 	cmd->set_vertex_attrib(3, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, pal_x));
-	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, u));
+	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(BufferVertex, u));
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
 	cmd->set_vertex_attrib(6, 0, VK_FORMAT_R16_UINT, offsetof(BufferVertex, scale));
 	cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestClamp);
@@ -2703,7 +2786,7 @@ void Renderer::render_semi_transparent_opaque_texture_primitives(PrimitiveType p
 	cmd->set_vertex_attrib(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(BufferVertex, color));
 	cmd->set_vertex_attrib(2, 0, VK_FORMAT_R8G8B8A8_UINT, offsetof(BufferVertex, window));
 	cmd->set_vertex_attrib(3, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, pal_x));
-	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, u));
+	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(BufferVertex, u));
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
 	cmd->set_vertex_attrib(6, 0, VK_FORMAT_R16_UINT, offsetof(BufferVertex, scale));
 	cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestClamp);
@@ -2742,7 +2825,7 @@ void Renderer::render_opaque_texture_primitives(PrimitiveType primitive_type)
 	cmd->set_vertex_attrib(1, 0, VK_FORMAT_R8G8B8A8_UNORM, offsetof(BufferVertex, color));
 	cmd->set_vertex_attrib(2, 0, VK_FORMAT_R8G8B8A8_UINT, offsetof(BufferVertex, window));
 	cmd->set_vertex_attrib(3, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, pal_x)); // Pad to support AMD
-	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R16G16B16A16_SINT, offsetof(BufferVertex, u));
+	cmd->set_vertex_attrib(4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(BufferVertex, u));
 	cmd->set_vertex_attrib(5, 0, VK_FORMAT_R16G16B16A16_UINT, offsetof(BufferVertex, min_u));
 	cmd->set_vertex_attrib(6, 0, VK_FORMAT_R16_UINT, offsetof(BufferVertex, scale));
 	cmd->set_texture(0, 0, scaled_framebuffer->get_view(), StockSampler::NearestClamp);

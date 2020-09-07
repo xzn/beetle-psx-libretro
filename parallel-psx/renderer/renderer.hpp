@@ -18,7 +18,7 @@ struct Vertex
 {
 	float x, y, w;
 	uint32_t color;
-	uint16_t u, v;
+	float u, v;
 };
 
 struct TextureWindow
@@ -371,8 +371,8 @@ public:
 	// Draw commands
 	void clear_rect(const Rect &rect, FBColor color);
 	void draw_line(const Vertex *vertices);
-	void draw_triangle(const Vertex *vertices);
-	void draw_quad(const Vertex *vertices);
+	void draw_triangle(Vertex *vertices);
+	void draw_quad(Vertex *vertices);
 
 	SaveState save_vram_state();
 
@@ -527,9 +527,9 @@ private:
 	{
 		float x, y, z, w;
 		uint32_t color;
+		float u, v, base_uv_x, base_uv_y;
 		TextureWindow window;
 		int16_t pal_x, pal_y, params;
-		int16_t u, v, base_uv_x, base_uv_y;
 		uint16_t min_u, min_v, max_u, max_v;
 		int16_t scale;
 	};
@@ -649,7 +649,8 @@ private:
 
 	float allocate_depth(const Rect &rect);
 
-	void build_attribs(BufferVertex *verts, const Vertex *vertices, unsigned count,
+	void adjust_attribs(Vertex *vertices, unsigned count);
+	void build_attribs(BufferVertex *verts, Vertex *vertices, unsigned count,
 		HdTextureHandle &hd_texture_index, bool &poly_w1);
 	void build_line_quad(Vertex *quad, const Vertex *line);
 	std::vector<BufferVertex> *select_pipeline(unsigned prims, int scissor, HdTextureHandle hd_texture);

@@ -6,10 +6,10 @@ layout(location = 6) in mediump uint Scale;
 #ifdef TEXTURED
 layout(location = 2) in mediump uvec4 Window;
 layout(location = 3) in mediump ivec3 Param;
-layout(location = 4) in ivec4 UV;
+layout(location = 4) in vec4 UV;
 layout(location = 5) in mediump uvec4 UVRange;
 
-layout(location = 1) out mediump vec2 vUV;
+layout(location = 1) out vec2 vUV;
 layout(location = 2) flat out mediump ivec3 vParam;
 layout(location = 3) flat out mediump ivec2 vBaseUV;
 layout(location = 4) flat out mediump ivec4 vWindow;
@@ -31,9 +31,9 @@ void main()
    vColor = Color;
 #ifdef TEXTURED
    // What am I doing?
-   vUV = vec2(UV.xy) + uvoff;
+   vUV = UV.xy + uvoff;
    vParam = Param;
-   vBaseUV = UV.zw;
+   vBaseUV = ivec2(UV.zw);
    vWindow = ivec4(Window);
    vTexLimits = ivec4(UVRange);
 #endif

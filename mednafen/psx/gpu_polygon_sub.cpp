@@ -22,7 +22,7 @@ void Calc_UVOffsets(PS_GPU *gpu, tri_vertex *vertices, unsigned count)
 	// or similar which should not share edges, which leads to this unfortunate code below.
 	//
 	// Only apply this workaround for quads.
-	if (count == 4 && (rsx_intf_is_type() != RSX_VULKAN || psx_gpu_upscale_shift_common != 0))
+	if (count == 4 && rsx_intf_is_type() != RSX_VULKAN)
 	{
 		// It might be faster to do more direct checking here, but the code below handles primitives in any order
 		// and orientation, and is far more SIMD-friendly if needed.
@@ -162,15 +162,15 @@ void Finalise_UVLimits(PS_GPU *gpu)
 
 		// In nearest neighbor, we'll get *very* close to this UV, but not close enough to actually sample it.
 		// If du/dx or dv/dx are negative, we probably need to invert this though ...
-		if (rsx_intf_is_type() != RSX_VULKAN || psx_gpu_upscale_shift_common != 0)
+		if (rsx_intf_is_type() != RSX_VULKAN)
 		{
 			// Will be sampled for 3D polygons though
 			// In any case if we don't use filters for sprites there's no issue. Otherwise need proper fix.
 
-			// if (max_u > min_u)
-			// 	max_u--;
-			// if (max_v > min_v)
-			// 	max_v--;
+			if (max_u > min_u)
+				max_u--;
+			if (max_v > min_v)
+				max_v--;
 		}
 
 		// If there's no wrapping, we can prewrap and avoid fallback.

@@ -738,9 +738,9 @@ void rsx_vulkan_push_triangle(
    }
 
    Vertex vertices[3] = {
-      { p0x, p0y, p0w, c0, t0x, t0y },
-      { p1x, p1y, p1w, c1, t1x, t1y },
-      { p2x, p2y, p2w, c2, t2x, t2y },
+      { p0x, p0y, p0w, c0, (float)t0x, (float)t0y },
+      { p1x, p1y, p1w, c1, (float)t1x, (float)t1y },
+      { p2x, p2y, p2w, c2, (float)t2x, (float)t2y },
    };
 
    renderer->draw_triangle(vertices);
@@ -826,10 +826,10 @@ void rsx_vulkan_push_quad(
    }
 
    Vertex vertices[4] = {
-      { p0x, p0y, p0w, c0, t0x, t0y },
-      { p1x, p1y, p1w, c1, t1x, t1y },
-      { p2x, p2y, p2w, c2, t2x, t2y },
-      { p3x, p3y, p3w, c3, t3x, t3y },
+      { p0x, p0y, p0w, c0, (float)t0x, (float)t0y },
+      { p1x, p1y, p1w, c1, (float)t1x, (float)t1y },
+      { p2x, p2y, p2w, c2, (float)t2x, (float)t2y },
+      { p3x, p3y, p3w, c3, (float)t3x, (float)t3y },
    };
 
    renderer->draw_quad(vertices);
