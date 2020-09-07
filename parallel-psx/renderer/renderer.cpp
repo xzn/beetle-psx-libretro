@@ -1744,6 +1744,10 @@ void Renderer::adjust_attribs(Vertex *vertices, unsigned count)
 	float off_u = 0.0;
 	float off_v = 0.0;
 	float off_one = 1.0;
+	bool off_ux = false;
+	bool off_uy = false;
+	bool off_vx = false;
+	bool off_vy = false;
 
 	// It might be faster to do more direct checking here, but the code below handles primitives in any order
 	// and orientation, and is far more SIMD-friendly if needed.
@@ -1799,13 +1803,25 @@ void Renderer::adjust_attribs(Vertex *vertices, unsigned count)
 		// Case 3: V is decreasing in X, but no change in Y.
 		// Case 4: V is decreasing in Y, but no change in X.
 		if (neg_dudx && zero_dudy)
+		{
 			off_u = off_one;
-		else if (neg_dudy && zero_dudx)
+			off_ux = true;
+		}
+		if (neg_dudy && zero_dudx)
+		{
 			off_u = off_one;
+			off_uy = true;
+		}
 		if (neg_dvdx && zero_dvdy)
+		{
 			off_v = off_one;
-		else if (neg_dvdy && zero_dvdx)
+			off_vx = true;
+		}
+		if (neg_dvdy && zero_dvdx)
+		{
 			off_v = off_one;
+			off_vy = true;
+		}
 	}
 
 	float max_x = 0.0f;
@@ -1837,10 +1853,16 @@ void Renderer::adjust_attribs(Vertex *vertices, unsigned count)
 
 	for (int i = 0; i < count; ++i)
 	{
-		if (off_u > 0 && (vertices[i].u != min_u || (max_u - min_u) >= (max_x - min_x))) // off by one hack for Valkyrie Profile
-			vertices[i].u += off_u;
-		if (off_v > 0 && (vertices[i].v != min_v || (max_v - min_v) >= (max_y - min_y)))
-			vertices[i].v += off_v;
+		if (off_u > 0)
+			if (vertices[i].u != min_u ||
+				(off_ux && (max_u - min_u) >= (max_x - min_x)) || // off by one hack for Valkyrie Profile
+				(off_uy && (max_u - min_u) >= (max_y - min_y)))
+				vertices[i].u += off_u;
+		if (off_v > 0)
+			if (vertices[i].v != min_v ||
+				(off_vx && (max_v - min_v) >= (max_x - min_x)) ||
+				(off_vy && (max_v - min_v) >= (max_y - min_y)))
+				vertices[i].v += off_v;
 	}
 }
 
