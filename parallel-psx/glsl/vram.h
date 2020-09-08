@@ -30,7 +30,7 @@ vec4 sample_vram_atlas(vec2 uvv)
         off.x >>= shift;
         // off = ivec2(mod((vBaseUV + off), vec2(1024, 512)));
         off += vBaseUV;
-        int value = int(pack_abgr1555(textureLod(uFramebuffer, (off + vec2(0.5, 0.5)) / FB_SIZE, 0)));
+        int value = int(pack_abgr1555(textureLod(uFramebuffer, off / FB_SIZE, 0)));
         int mask = (1 << bpp) - 1;
         value = (value >> align) & mask;
         params.x += value;
@@ -40,7 +40,7 @@ vec4 sample_vram_atlas(vec2 uvv)
         // coord = mod((vBaseUV + uvv), vec2(1024, 512));
         coord = vBaseUV + uvv;
 
-    return textureLod(uFramebuffer, (coord + vec2(0.5, 0.5)) / FB_SIZE, 0);
+    return textureLod(uFramebuffer, coord / FB_SIZE, 0);
 }
 
 // Take a normalized color and convert it into a 16bit 1555 ABGR
