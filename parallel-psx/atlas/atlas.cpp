@@ -189,7 +189,7 @@ void FBAtlas::read_domain(Domain domain, Stage stage, const Rect &rect)
 		}
 		else if (stage == Stage::FragmentTexture)
 		{
-			hazard_domains &= ~(STATUS_FRAGMENT_SFB_READ | STATUS_TEXTURE_READ);
+			hazard_domains &= ~(STATUS_FRAGMENT_FB_READ | STATUS_TEXTURE_READ);
 			resolve_domains = STATUS_FRAGMENT_FB_READ | STATUS_TEXTURE_READ;
 		}
 	}
