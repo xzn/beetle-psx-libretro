@@ -2,10 +2,6 @@
 precision highp float;
 precision highp int;
 
-#ifdef TEXTURED
-#define FILTERS
-#endif
-
 #include "common.h"
 #include "primitive.h"
 
@@ -17,19 +13,6 @@ layout(push_constant, std430) uniform Push
 } push;
 #ifdef TEXTURED
 #include "hdtextures.h"
-
-const int OPAQUE = 0;
-const int SEMI_TRANS = 1;
-const int SEMI_TRANS_OPAQUE = 2;
-layout(constant_id = 0) const int TRANSPARENCY_MODE = OPAQUE;
-
-const int FILTER_NEAREST = 0;
-const int FILTER_XBR = 1;
-const int FILTER_SABR = 2;
-const int FILTER_BILINEAR = 3;
-const int FILTER_3POINT = 4;
-const int FILTER_JINC2 = 5;
-layout(constant_id = 1) const int FILTER_TYPE = FILTER_NEAREST;
 #endif
 
 void main()
@@ -55,29 +38,32 @@ void main()
 	// Sample in NN space since we need to do an exact test against 0.0.
 	// Doing it in a filtered domain is a bit awkward.
 	// In this pass, only accept opaque pixels.
-	if (TRANSPARENCY_MODE == SEMI_TRANS_OPAQUE)
-		if (all(equal(NNColor, vec4(0.0))) || NNColor.a > 0.5)
-			discard;
+#ifdef SEMI_TRANS_OPAQUE
+	if (all(equal(NNColor, vec4(0.0))) || NNColor.a > 0.5)
+		discard;
+#endif
 
 	// To avoid opaque pixels from bleeding into the semi-transparent parts,
 	// sample nearest-neighbor only in semi-transparent parts of the image.
 	vec4 color = NNColor;
 
 	// texture filtering
-	if (FILTER_TYPE == FILTER_XBR)
-		color = sample_vram_xbr(opacity);
-	if (FILTER_TYPE == FILTER_BILINEAR)
-		color = sample_vram_bilinear(opacity);
-	if (FILTER_TYPE == FILTER_SABR)
-		color = sample_vram_sabr(opacity);
-	if (FILTER_TYPE == FILTER_JINC2)
-		color = sample_vram_jinc2(opacity);
-	if (FILTER_TYPE == FILTER_3POINT)
-		color = sample_vram_3point(opacity);
+#ifdef FILTER_XBR
+	color = sample_vram_xbr(opacity);
+#elif defined(FILTER_BILINEAR)
+	color = sample_vram_bilinear(opacity);
+#elif defined(FILTER_SABR)
+	color = sample_vram_sabr(opacity);
+#elif defined(FILTER_JINC2)
+	color = sample_vram_jinc2(opacity);
+#elif defined(FILTER_3POINT)
+	color = sample_vram_3point(opacity);
+#endif
 
-	if (TRANSPARENCY_MODE == OPAQUE || TRANSPARENCY_MODE == SEMI_TRANS)
-		if (color.a == 0.0 && all(equal(vec4(NNColor), vec4(0.0))))
-			discard;
+#if defined(OPAQUE) || defined(SEMI_TRANS)
+	if (color.a == 0.0 && all(equal(vec4(NNColor), vec4(0.0))))
+		discard;
+#endif
 
 	// hd texture filtering
 	if (hd_enabled) {

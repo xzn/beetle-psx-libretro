@@ -10,7 +10,6 @@ layout(location = 5) flat in mediump ivec4 vTexLimits;
 layout(set = 0, binding = 0) uniform mediump usampler2D uFramebuffer;
 #elif defined(MSAA)
 layout(set = 0, binding = 0) uniform mediump sampler2DMS uFramebufferMS;
-layout(constant_id = 3) const int SCALE = 1;
 #else
 layout(set = 0, binding = 0) uniform mediump sampler2D uFramebuffer;
 #endif
@@ -25,7 +24,8 @@ vec4 sample_vram_atlas(vec2 uvv)
 {
     const vec2 FB_SIZE = vec2(1024, 512);
     ivec3 params = vParam;
-    int shift = params.z & 3;
+    // int shift = params.z & 3;
+    const int shift = SHIFT;
 
     vec2 coord;
     if (shift != 0)
@@ -81,7 +81,7 @@ bool is_transparent(vec4 texel)
 	return rebuild_psx_color(texel) == 0U;
 }
 
-#ifdef FILTERS
+#ifdef FILTER_BILINEAR
 vec4 sample_vram_bilinear(out float opacity)
 {
   float x = vUV.x;
@@ -97,27 +97,29 @@ vec4 sample_vram_bilinear(out float opacity)
   vec4 texel_10 = sample_vram_atlas(clamp_coord(vec2(x + uv_offs.x, y + 0.)));
   vec4 texel_01 = sample_vram_atlas(clamp_coord(vec2(x + 0., y + uv_offs.y)));
   vec4 texel_11 = sample_vram_atlas(clamp_coord(vec2(x + uv_offs.x, y + uv_offs.y)));
-  
+
   // test for fully transparent texel
   texel_00.w = 1. - float(is_transparent(texel_00));
   texel_10.w = 1. - float(is_transparent(texel_10));
   texel_01.w = 1. - float(is_transparent(texel_01));
   texel_11.w = 1. - float(is_transparent(texel_11));
-	 
+
    // average samples
    vec4 texel = texel_00 * (1. - uv_frac.x) * (1. - uv_frac.y)
      + texel_10 * uv_frac.x * (1. - uv_frac.y)
      + texel_01 * (1. - uv_frac.x) * uv_frac.y
      + texel_11 * uv_frac.x * uv_frac.y;
-     
+
    opacity = texel.w;
-	
+
    // adjust colour to account for black transparent samples (assume rgb would be average of other pixels)
    texel.rgb = texel.rgb * (1./opacity);
 
    return texel;
 }
+#endif
 
+#ifdef FILTER_XBR
 const int BLEND_NONE = 0;
 const int BLEND_NORMAL = 1;
 const int BLEND_DOMINANT = 2;
@@ -375,12 +377,14 @@ vec4 sample_vram_xbr(out float opacity)
     vec4 blendPix = mix(D,B, step(DistYCbCr(E, B), DistYCbCr(E, D)));
     res = mix(res, blendPix, get_left_ratio(pos, origin, direction, scale));
   }
-     
+
     opacity = res.w;
     res.xyz = res.xyz * (1./opacity);
     return vec4(res);
 }
+#endif
 
+#ifdef FILTER_SABR
 // constants and functions for sabr
 const  vec4 Ai  = vec4( 1.0, -1.0, -1.0,  1.0);
 const  vec4 B45 = vec4( 1.0,  1.0, -1.0, -1.0);
@@ -435,7 +439,7 @@ vec4 sample_vram_sabr(out float opacity)
    vec4 xyp_21_22_23 = tc.xxxy + vec4(-1,  0, 1,  2);
    vec4 xyp_5_10_15  = tc.xyyy + vec4(-2, -1, 0,  1);
    vec4 xyp_9_14_9   = tc.xyyy + vec4( 2, -1, 0,  1);
-   
+
 	// Store mask values
 	vec4 P1  = P(xyp_1_2_3.xw   );
 	P1.w = 1. - float(is_transparent(P1));
@@ -539,7 +543,9 @@ vec4 sample_vram_sabr(out float opacity)
 
    return texel;
 }
+#endif
 
+#ifdef FILTER_JINC2
 const float JINC2_WINDOW_SINC = 0.44;
 const float JINC2_SINC = 0.82;
 const float JINC2_AR_STRENGTH = 0.8;
@@ -653,12 +659,14 @@ vec4 sample_vram_jinc2(out float opacity)
     texel.rgb = texel.rgb * (1./opacity);
     return texel;
 }
+#endif
 
+#ifdef FILTER_3POINT
 vec4 sample_vram_3point(out float opacity)
 {
   float x = vUV.x;
   float y = vUV.y;
-  
+
   // interpolate from centre of texel
   vec2 uv_frac = fract(vec2(x, y)) - vec2(0.5, 0.5);
   vec2 uv_offs = sign(uv_frac);
@@ -680,7 +688,7 @@ vec4 sample_vram_3point(out float opacity)
 
    vec4 texel_10 = sample_vram_atlas(clamp_coord(vec2(x + uv_offs.x, y)));
    vec4 texel_01 = sample_vram_atlas(clamp_coord(vec2(x, y + uv_offs.y)));
-   
+
    texel_00.w = 1. - float(is_transparent(texel_00));
    texel_10.w = 1. - float(is_transparent(texel_10));
    texel_01.w = 1. - float(is_transparent(texel_01));
@@ -688,7 +696,7 @@ vec4 sample_vram_3point(out float opacity)
    vec4 texel = texel_00
      + uv_frac.x * (texel_10 - texel_00)
      + uv_frac.y * (texel_01 - texel_00);
-	
+
 	opacity = texel.w;
    // adjust colour to account for black transparent samples (assume rgb would be average of other pixels)
    texel.rgb = texel.rgb * (1./opacity);

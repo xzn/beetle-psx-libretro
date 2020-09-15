@@ -17,10 +17,6 @@ layout(set = 0, binding = 1) uniform sampler2DMS uScaledMS;
 #else
 layout(set = 0, binding = 1) uniform sampler2D uScaled;
 #endif
-
-layout(constant_id = 0) const int NUM_SAMPLES = 1;
-layout(constant_id = 1) const int FILTER_MODE = 0;
-layout(constant_id = 3) const int SCALE = 1;
 #endif
 
 layout(set = 1, binding = 0, std140) uniform Rects
@@ -53,24 +49,15 @@ void main()
 	uvec2 coord = gl_GlobalInvocationID.xy + offsets[gl_WorkGroupID.z].xy;
 	vec4 value;
 
-	if (FILTER_MODE == 0)
-	{
-	#if defined(MSAA)
-		value = texelFetch(uScaledMS, ivec2(coord * SCALE), 0);
-	#else
-		value = texelFetch(uScaled, ivec2(coord * SCALE), 0);
-	#endif
-	}
-	else
-	{
+#ifdef FILTER
 	#if defined(MSAA)
 		value = vec4(0.0);
 		ivec2 uv = ivec2(coord * SCALE);
 		for (int y = 0; y < SCALE; y++)
 			for (int x = 0; x < SCALE; x++)
-				for (int i = 0; i < NUM_SAMPLES; i++)
+				for (int i = 0; i < SAMPLES; i++)
 					value += texelFetch(uScaledMS, uv + ivec2(x, y), i);
-		value /= SCALE * SCALE * NUM_SAMPLES;
+		value /= SCALE * SCALE * SAMPLES;
 	#else
 		vec2 uv = (vec2(coord) + 0.5) * registers.inv_source_size;
 
@@ -123,7 +110,13 @@ void main()
 			value /= 64.0;
 		}
 	#endif
-	}
+#else
+	#if defined(MSAA)
+		value = texelFetch(uScaledMS, ivec2(coord * SCALE), 0);
+	#else
+		value = texelFetch(uScaled, ivec2(coord * SCALE), 0);
+	#endif
+#endif
 
 	uint packed_color = pack_abgr1555(value);
 	imageStore(uUnscaled, ivec2(coord), uvec4(packed_color));
